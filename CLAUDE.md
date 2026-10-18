@@ -54,6 +54,9 @@ For local dev, set `STORAGE_DIR=./dev-data` so nothing writes to `/data`.
 ## Gotchas
 
 - adapter-node needs `ORIGIN` (or `PROTOCOL_HEADER`/`HOST_HEADER`) set, or form actions fail the CSRF check. `BODY_SIZE_LIMIT` controls the upload size.
+- Overlay sites are symlinks, so `grab` must run with `NODE_PRESERVE_SYMLINKS=1` or their `require('dayjs')` fails ([docs/spikes/M2-overlay-symlinks.md](docs/spikes/M2-overlay-symlinks.md)).
+- A fresh epg checkout shows hundreds of "modified" files (upstream CRLF blobs vs. `eol=crlf`). That's expected; don't treat `git status` output there as our bug.
+- `nano-spawn` merges `env` over `process.env`. Use `runCommand` from `src/lib/server/spawn.ts`, which blanks inherited vars, never `nano-spawn` directly.
 - `npm install` in the epg checkout triggers `postinstall: api:load` and `prepare: husky`. Use `npm ci --ignore-scripts` and then `npm run api:load` explicitly.
 - epg's `grab` falls back to `site_id` as the guide channel id when `xmltv_id` is empty. Warn the user about this rather than blocking it.
 - `xmltv_id` format is `ChannelID.cc@FeedID` (for example `WCBSTV.us@SD`). The country comes from the `.cc` suffix.

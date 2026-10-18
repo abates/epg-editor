@@ -42,7 +42,14 @@ export default defineConfig([
   },
 
   {
-    ignores: ['tests/__data__/**', '.svelte-kit/**', 'static/**', 'build/**']
+    ignores: [
+      'tests/__data__/**',
+      '.svelte-kit/**',
+      'static/**',
+      'build/**',
+      'dev-data/**',
+      'data/**'
+    ]
   },
 
   {

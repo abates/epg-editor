@@ -122,8 +122,8 @@ Concept: sites that are not (yet) in iptv-org/epg are developed **outside** this
 | ID | Pri | Requirement |
 | --- | --- | --- |
 | FR-O-1 | MUST | Overlay directory (default `/data/sites`) uses upstream layout: `<site>/<site>.config.js` and `<site>/<site>.channels.xml` (more files allowed). |
-| FR-O-2 | MUST | During sync, each overlay site folder is symlinked into `<epg>/sites/<site>` so it resolves epg's `node_modules` (site configs `require('dayjs')`, etc.) and is found by `grab` via `SITES_DIR`. |
-| FR-O-3 | MUST | If an overlay site has the same name as an upstream site, the overlay wins; the upstream folder is moved aside for the duration (restored on next sync if overlay removed) and the conflict is shown in the UI. Sync must leave the git working tree restorable (`git status` clean after removing links / `git checkout -- sites`). |
+| FR-O-2 | MUST | During sync, each overlay site folder is symlinked into `<epg>/sites/<site>` so it resolves epg's `node_modules` (site configs `require('dayjs')`, etc.) and is found by `grab` via `SITES_DIR`. *(The grab must run with `NODE_PRESERVE_SYMLINKS=1`, or Node resolves `require()` from the link's real path: [spikes/M2-overlay-symlinks.md](spikes/M2-overlay-symlinks.md).)* |
+| FR-O-3 | MUST | If an overlay site has the same name as an upstream site, the overlay wins; the upstream folder is moved aside for the duration (restored on next sync if overlay removed) and the conflict is shown in the UI. Sync must leave the git working tree restorable (`git status` clean after removing links / `git checkout -- sites`). *(Clean relative to a fresh checkout: upstream's CRLF blobs always show as modified; see the M2 spike.)* |
 | FR-O-4 | MUST | Overlay entries appear in the suggestion index with an `overlay` badge. |
 | FR-O-5 | SHOULD | Status page lists overlay sites, conflicts and any load errors (e.g. config fails to `require`). |
 | FR-O-6 | SHOULD | Document the overlay workflow in README (develop → mount → map → grab → contribute). |

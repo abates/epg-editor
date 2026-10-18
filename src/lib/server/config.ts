@@ -3,6 +3,7 @@ import path from 'node:path'
 // Read from process.env rather than $env so the tsx commands (outside SvelteKit) can use it too
 export interface Config {
   storageDir: string
+  epgDir: string
   overlayDir: string
   epg: {
     repo: string
@@ -25,6 +26,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   return {
     storageDir,
+    epgDir: path.join(storageDir, 'epg'),
     overlayDir: path.resolve(string(env, 'OVERLAY_DIR') ?? path.join(storageDir, 'sites')),
     epg: {
       repo: string(env, 'EPG_REPO') ?? 'https://github.com/iptv-org/epg.git',

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<channels>
+  <channel site="tvtv.us" lang="en" xmltv_id="WCBSTV.us@SD" site_id="10098">WCBS-DT</channel>
+  <channel site="tvtv.us" lang="en" xmltv_id="WNBCDT.us@SD" site_id="10991">WNBC-DT</channel>
+  <channel site="tvtv.us" lang="en" xmltv_id="" site_id="20453">NBC LX</channel>
+</channels>

@@ -154,6 +154,8 @@ Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src
 │   │   │   ├── channelsXml.ts        # Mapping[] → channels.xml string [5.7]
 │   │   │   ├── matcher.ts            # features + scoring [5.4]
 │   │   │   ├── slug.ts               # slugify + NFR-SEC-3 slug check
+│   │   │   ├── xmltvId.ts            # xmltv_id format + country suffix
+│   │   │   ├── staleMappings.ts      # mark mappings whose entry vanished [FR-P-8]
 │   │   │   └── escapeString.ts       # port of epg's escapeString
 │   │   ├── models/               # Lineup, PlaylistItem, Mapping, GuideEntry
 │   │   └── server/               # server-only (Node fs, child_process)
@@ -164,8 +166,11 @@ Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src
 │   │       ├── database.ts           # @iptv-org/sdk DataManager over /data/epg/temp/data
 │   │       ├── epgRepo.ts            # clone/fetch/reset/npm ci/api:load
 │   │       ├── overlay.ts            # link/unlink overlay sites, conflict handling
+│   │       ├── sync.ts               # sync orchestration, shared by run:sync and run:all
 │   │       ├── grabRunner.ts         # build args, spawn, capture log, atomic publish
-│   │       ├── lock.ts               # run.lock with pid + stale detection
+│   │       ├── spawn.ts              # nano-spawn with argument arrays + sanitised env
+│   │       ├── runLog.ts             # per-run log file under /data/logs + tail + rotation
+│   │       ├── lock.ts               # run.lock via proper-lockfile (mtime-based stale detection)
 │   │       └── jobs.ts               # spawn detached commands from the web process
 │   └── routes/
 │       ├── +layout.svelte  +page.svelte  +page.server.ts
@@ -204,12 +209,17 @@ Re-import: parse new playlist → diff by `key` against current → show diff pa
 3. Confirm → `PUT /api/lineups/<slug>/mappings` `{ key, status, guide }` → validate (FR-E-2) → write `mappings.json` → regenerate `channels.xml` → return updated row.
 
 ### 5.3 Sync [5.8]
+Implemented in `server/sync.ts`; the caller holds `run.lock`.
+
 1. Remove overlay links, restore shadowed upstream folders.
-2. `git fetch --depth 1 origin <branch|ref>` → `git reset --hard FETCH_HEAD` → `git clean -fd sites` (only `sites/`; never touch `node_modules`/`temp`).
-3. If sha256(`package-lock.json`) ≠ stored → `npm ci --ignore-scripts`.
-4. `npm run api:load` (refresh database JSON into `temp/data`).
+2. First run: `git init` a temp dir next to `/data/epg`, then the fetch below, then rename into place (a failed clone leaves nothing; init + fetch lets `EPG_REF` be a commit). Later runs: `git remote set-url origin $EPG_REPO`, then `git fetch --depth 1 origin <branch|ref>` → `git reset --hard FETCH_HEAD` → `git clean -fd -- sites` (only `sites/`; never touch `node_modules`/`temp`).
+3. If sha256(`package-lock.json`) ≠ stored, or `node_modules` is missing → `npm ci --ignore-scripts`. If that fails, `git reset --hard` back to the previous commit and `npm ci` again, so the last good checkout keeps working.
+4. `npm run api:load` (refresh database JSON into `temp/data`). If it fails but `temp/data` exists, keep the old data with a warning.
 5. Apply overlay: for each `/data/sites/<site>` → if `/data/epg/sites/<site>` exists, move it to `/data/.epg-sites-shadow/` → symlink.
-6. Write `status/sync.json` (sha, times, overlay report). On any failure in 2–4 keep previous checkout, record error.
+6. Load `GuideIndex` and the database; mark stale mappings and regenerate every lineup's `channels.xml` [FR-G-4].
+7. Write `status/sync.json` (sha, times, overlay report, index/database counts, log tail) last. Steps 5–6 run even when 2–4 failed, against the previous checkout.
+
+A fresh epg checkout is never `git status`-clean: upstream commits CRLF blobs under `eol=crlf` attributes ([spikes/M2-overlay-symlinks.md](spikes/M2-overlay-symlinks.md)).
 
 ### 5.4 Grab [5.9]
 For each enabled lineup with ≥1 mapped channel:
@@ -218,8 +228,9 @@ spawn('npm', ['run', 'grab', '---',
   '--channels', <abs channels.xml>,
   '--output',   <tmp>/<slug>.xml,
   ...overrides, ...(gzip ? ['--gzip'] : [])],
-  { cwd: '/data/epg', env: sanitizedEnv })
+  { cwd: '/data/epg', env: sanitizedEnv({ NODE_PRESERVE_SYMLINKS: '1' }) })
 ```
+`NODE_PRESERVE_SYMLINKS=1` is required: without it, symlinked overlay configs resolve `require()` from `/data/sites` and can't find epg's `node_modules` ([spikes/M2-overlay-symlinks.md](spikes/M2-overlay-symlinks.md)).
 Pipe stdout/stderr to the run log; parse `[i/total]` lines for progress; on exit 0 and non-empty output → `rename` into `/data/guides/`. Record run in `status/runs/<slug>.json`.
 
 ## 6. Reuse from upstream (do not reinvent)
@@ -235,6 +246,8 @@ Pipe stdout/stderr to the run log; parse `[i/total]` lines for progress; on exit
 | Process manager | `pm2` / `pm2-runtime` |
 | XML escaping | port of epg's `escapeString` (keep identical behaviour, with test). `epg-grabber` has a copy but doesn't export it; generic XML builders don't strip invalid characters or collapse whitespace the way epg does |
 | M3U parsing | `@iptv/playlist`, behind a line filter in `playlistParser.ts` that works around an infinite loop on malformed input ([upstream/iptv-playlist-infinite-loop.md](upstream/iptv-playlist-infinite-loop.md)) |
+| Run lock | `proper-lockfile` (atomic mkdir; stale when the holder stops refreshing its mtime, so PID reuse after a container restart can't wedge it) |
+| Child processes | `nano-spawn` with argument arrays; `spawn.ts` blanks inherited env vars so only the allow-list reaches epg [FR-R-4]. git runs as the CLI through the same helper (no `simple-git`) |
 | Atomic writes | `write-file-atomic` (temp file + fsync + rename). `@freearhey/storage-js` writes in place, so it isn't used for writes |
 | Slugs | `slugify` (`strict`, lower-case), then checked against the NFR-SEC-3 pattern |
 | UI components | port from iptv-org.github.io `src/lib/components/Common` + icons (public domain / Unlicense) |

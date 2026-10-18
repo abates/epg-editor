@@ -25,6 +25,7 @@
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.5",
+    "@types/proper-lockfile": "^4.1.4",
     "@types/write-file-atomic": "^4.0.3",
     "@zerodevx/svelte-toast": "^0.9.6",
     "eslint": "^10.13.0",
@@ -43,9 +44,12 @@
   },
   "dependencies": {
     "@freearhey/core": "^0.16.1",
+    "@iptv-org/sdk": "^1.5.0",
     "@iptv/playlist": "^1.2.1",
     "commander": "^15.0.0",
     "epg-grabber": "^0.48.0",
+    "nano-spawn": "^2.1.0",
+    "proper-lockfile": "^4.1.2",
     "slugify": "^1.6.9",
     "tsx": "^4.23.15",
     "write-file-atomic": "^7.0.1"

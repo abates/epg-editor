@@ -5,6 +5,7 @@ describe('loadConfig', () => {
   it('uses the documented defaults', () => {
     expect(loadConfig({})).toEqual({
       storageDir: '/data',
+      epgDir: '/data/epg',
       overlayDir: '/data/sites',
       epg: { repo: 'https://github.com/iptv-org/epg.git', branch: 'master', ref: null },
       cronSchedule: '0 0 * * *',
@@ -23,6 +24,7 @@ describe('loadConfig', () => {
     })
 
     expect(config.storageDir).toBe('/srv/epg')
+    expect(config.epgDir).toBe('/srv/epg/epg')
     expect(config.overlayDir).toBe('/srv/epg/sites')
     expect(config.epg.ref).toBe('v1.2.3')
     expect(config.runAtStartup).toBe(false)

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<channels>
+  <channel site="example.com" lang="fr" xmltv_id="TF1.fr@SD" site_id="tf1" logo="https://example.com/tf1.png">TF1</channel>
+</channels>
