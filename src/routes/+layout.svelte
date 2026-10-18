@@ -2,14 +2,10 @@
   import { SvelteToast } from '@zerodevx/svelte-toast'
   import { Modal, NavBar } from '$lib/components'
   import { IPTV_ORG_EPG_URL } from '$lib/constants'
-  import type { Snippet } from 'svelte'
+  import type { LayoutProps } from './$types'
   import '../app.css'
 
-  interface Props {
-    children?: Snippet
-  }
-
-  let { children }: Props = $props()
+  let { data, children }: LayoutProps = $props()
 
   const toastOptions = {
     duration: 5000,
@@ -39,6 +35,16 @@
 <Modal>
   <div class="flex flex-col min-h-screen">
     <NavBar />
+    {#if !data.indexReady}
+      <div
+        class="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 text-sm border-b border-amber-200 dark:border-amber-900"
+      >
+        <div class="mx-auto px-3 py-2 w-full max-w-7xl">
+          The guide index is initialising: iptv-org/epg is being downloaded and indexed. Lineups can
+          be imported now; suggestions and search work once it has finished.
+        </div>
+      </div>
+    {/if}
     <main class="grow">
       {@render children?.()}
     </main>

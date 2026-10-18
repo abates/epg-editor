@@ -1,9 +1,15 @@
+import type { MappingData, MappingGuideData, MappingRequestData } from '$lib/types/mapping'
+import type { ChannelCountsData, ChannelRowData } from '$lib/types/channel'
 import type { SuggestionData } from '$lib/types/suggestion'
+import type { PlaylistItemData } from '$lib/types/playlist'
+import type { LineupData } from '$lib/types/lineup'
+import { validateGuideEntry, type GuideEntryField } from '$lib/core/mappingValidation'
+import { buildChannelRows, countChannels } from '$lib/core/channelRows'
 import { Matcher, lineupCallSigns } from '$lib/core/matcher'
 import { parsePlaylist } from '$lib/core/playlistParser'
 import { GuideIndex, GuideIndexCache } from './guideIndex'
 import { config as defaultConfig, type Config } from './config'
-import { LineupStore } from './lineupStore'
+import { LineupStore, type LineupLoadError } from './lineupStore'
 import { SYNC_STATUS_FILE } from './sync'
 import { Database } from './database'
 import { Storage } from './storage'
@@ -12,6 +18,22 @@ import path from 'node:path'
 
 // Long-lived state of the web process. The matcher and database belong to one guide index,
 // so both are rebuilt when a sync rewrites status/sync.json and the index reloads
+export interface LineupSummaryData {
+  lineup: LineupData
+  counts: ChannelCountsData
+}
+
+export interface LineupViewData {
+  lineup: LineupData
+  rows: ChannelRowData[]
+  counts: ChannelCountsData
+  warnings: string[]
+}
+
+export type SaveMappingResult =
+  | { ok: true; row: ChannelRowData; warnings: string[] }
+  | { ok: false; errors: Partial<Record<GuideEntryField, string>>; warnings: string[] }
+
 export class Services {
   readonly lineups: LineupStore
   readonly guideIndex: GuideIndexCache
@@ -68,9 +90,138 @@ export class Services {
     return matcher.suggest(item, lineup.filters, { callSigns: lineupCallSigns(items) })
   }
 
+  // Lineup list [FR-L-2]; a lineup whose files can't be read is reported, not thrown
+  async listLineups(): Promise<{ lineups: LineupSummaryData[]; errors: LineupLoadError[] }> {
+    const { lineups, errors } = await this.lineups.list()
+    const summaries: LineupSummaryData[] = []
+    for (const lineup of lineups) {
+      try {
+        summaries.push({ lineup, counts: (await this.viewLineup(lineup.slug)).counts })
+      } catch (error) {
+        errors.push({ slug: lineup.slug, message: (error as Error).message })
+      }
+    }
+
+    return { lineups: summaries, errors }
+  }
+
+  // Editor rows [FR-P-1]
+  async viewLineup(slug: string): Promise<LineupViewData> {
+    const lineup = await this.lineups.get(slug)
+    if (!lineup) error(404, `Lineup "${slug}" not found`)
+
+    const { items, warnings } = parsePlaylist(await this.lineups.loadSource(slug))
+    const rows = buildChannelRows(items, await this.lineups.loadMappings(slug))
+
+    return { lineup, rows, counts: countChannels(rows), warnings }
+  }
+
+  // Best suggestion per unmapped channel, for the editor's "Suggested" badges. Null while
+  // the guide index is not ready
+  async topSuggestions(slug: string): Promise<Record<string, SuggestionData> | null> {
+    const index = await this.guideIndex.get()
+    if (!index) return null
+
+    const lineup = await this.lineups.get(slug)
+    if (!lineup) return null
+    const { items } = parsePlaylist(await this.lineups.loadSource(slug))
+    const { items: mappings } = await this.lineups.loadMappings(slug)
+    const matcher = await this.matcher()
+    const callSigns = lineupCallSigns(items)
+
+    const result: Record<string, SuggestionData> = {}
+    for (const item of items) {
+      if (mappings[item.key]) continue
+      const [top] = matcher.suggest(item, lineup.filters, { callSigns, limit: 1 })
+      if (top) result[item.key] = top
+    }
+
+    return result
+  }
+
+  // Known site names for the Manual tab's picker [FR-E-1]
+  async sites(): Promise<string[]> {
+    return (await this.guideIndex.get())?.sites ?? []
+  }
+
+  // FR-P-4..6: entries picked from the index are copied from it, so a client can't save an
+  // entry that doesn't exist; manual entries are validated [FR-E-2]
+  async saveMapping(slug: string, request: MappingRequestData): Promise<SaveMappingResult> {
+    const item = await this.requireItem(slug, request.key)
+    const updatedAt = new Date().toISOString()
+    let mapping: MappingData
+    let warnings: string[] = []
+
+    if (request.status === 'skipped') {
+      mapping = { status: 'skipped', updatedAt }
+    } else if ('entry' in request) {
+      const entry = (await this.readyIndex()).find(request.entry.site, request.entry.site_id)
+      if (!entry)
+        error(400, `Guide entry ${request.entry.site} / ${request.entry.site_id} not found`)
+      const { site, site_id, lang, xmltv_id, name, origin } = entry
+      mapping = {
+        status: 'mapped',
+        guide: { site, site_id, lang, xmltv_id, name, origin },
+        updatedAt
+      }
+      if (!xmltv_id)
+        warnings.push('Without an xmltv_id the guide uses the site ID as the channel id')
+    } else {
+      const index = await this.readyIndex()
+      const database = await this.optionalDatabase()
+      const validation = validateGuideEntry(request.manual, {
+        hasSite: site => index.hasSite(site),
+        hasXmltvId: database ? id => database.hasXmltvId(id) : undefined
+      })
+      warnings = validation.warnings
+      if (Object.keys(validation.errors).length)
+        return { ok: false, errors: validation.errors, warnings }
+
+      const guide: MappingGuideData = {
+        ...validation.value,
+        name: database?.channelName(validation.value.xmltv_id) ?? validation.value.site_id,
+        origin: 'manual'
+      }
+      mapping = { status: 'mapped', guide, updatedAt }
+    }
+
+    await this.lineups.setMapping(slug, item.key, mapping)
+
+    return { ok: true, row: toRow(item, mapping), warnings }
+  }
+
+  async clearMapping(slug: string, key: string): Promise<ChannelRowData> {
+    const item = await this.requireItem(slug, key)
+    await this.lineups.setMapping(slug, key, null)
+
+    return toRow(item, null)
+  }
+
+  private async requireItem(slug: string, key: string): Promise<PlaylistItemData> {
+    if (!(await this.lineups.get(slug))) error(404, `Lineup "${slug}" not found`)
+
+    const { items } = parsePlaylist(await this.lineups.loadSource(slug))
+    const item = items.find(item => item.key === key)
+    if (!item) error(404, `Channel "${key}" not found in lineup "${slug}"`)
+
+    return item
+  }
+
+  private async optionalDatabase(): Promise<Database | null> {
+    try {
+      return await this.database()
+    } catch {
+      return null
+    }
+  }
+
   private async readyIndex(): Promise<GuideIndex> {
     return (await this.guideIndex.get()) ?? error(503, 'The guide index is not ready yet')
   }
+}
+
+function toRow(item: PlaylistItemData, mapping: MappingData | null): ChannelRowData {
+  return buildChannelRows([item], { version: 1, items: mapping ? { [item.key]: mapping } : {} })[0]
 }
 
 export const services = new Services(defaultConfig)

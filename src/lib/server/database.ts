@@ -11,7 +11,7 @@ const SEARCH_LIMIT = 20
 export class Database {
   readonly channels: sdk.Models.Channel[]
   readonly feeds: sdk.Models.Feed[]
-  private readonly channelIds: Set<string>
+  private readonly channelsById: Map<string, sdk.Models.Channel>
   private readonly streamIds: Set<string>
   private readonly feedsByChannel: Map<string, sdk.Models.Feed[]>
   private search: MiniSearch<{
@@ -24,7 +24,7 @@ export class Database {
   constructor(channels: sdk.Models.Channel[], feeds: sdk.Models.Feed[]) {
     this.channels = channels
     this.feeds = feeds
-    this.channelIds = new Set(channels.map(channel => channel.id))
+    this.channelsById = new Map(channels.map(channel => [channel.id, channel]))
     this.streamIds = new Set(feeds.map(feed => feed.getStreamId()))
     this.feedsByChannel = new Map()
     for (const feed of feeds) {
@@ -47,9 +47,16 @@ export class Database {
   hasXmltvId(xmltvId: string): boolean {
     const parts = parseXmltvId(xmltvId)
     if (!parts) return false
-    if (!parts.feed) return this.channelIds.has(parts.channel)
+    if (!parts.feed) return this.channelsById.has(parts.channel)
 
     return this.streamIds.has(xmltvId)
+  }
+
+  // Display name for a manual mapping; null when the channel is not in the database
+  channelName(xmltvId: string): string | null {
+    const parts = parseXmltvId(xmltvId)
+
+    return (parts && this.channelsById.get(parts.channel)?.name) ?? null
   }
 
   // Channels by id, name or alternative name, each with its feeds [FR-E-1, FR-S-5]

@@ -1,0 +1,5 @@
+export { default as MappingModal } from './MappingModal.svelte'
+export { default as EntryList } from './EntryList.svelte'
+export { default as SuggestionsTab } from './SuggestionsTab.svelte'
+export { default as SearchTab } from './SearchTab.svelte'
+export { default as ManualTab } from './ManualTab.svelte'

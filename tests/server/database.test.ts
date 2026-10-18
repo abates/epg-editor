@@ -15,6 +15,13 @@ describe('Database', () => {
     expect(database.hasXmltvId('WCBSTV.us')).toBe(false)
   })
 
+  it('names channels by xmltv_id, with or without a feed', () => {
+    expect(database.channelName('IONTV.us@East')).toBe(database.find('ion tv')[0].name)
+    expect(database.channelName('IONTV.us')).toBe(database.find('ion tv')[0].name)
+    expect(database.channelName('WCBSTV.us')).toBeNull()
+    expect(database.channelName('not an id')).toBeNull()
+  })
+
   describe('find', () => {
     const ids = (query: string, limit?: number) =>
       database.find(query, limit).map(channel => channel.xmltv_id)

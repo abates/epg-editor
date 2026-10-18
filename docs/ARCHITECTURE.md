@@ -148,7 +148,7 @@ Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src
 │   │   ├── icons/                # one Svelte SVG per icon, `size` prop (site convention)
 │   │   ├── actions/              # clickOutside, tippy
 │   │   ├── types/                # *.d.ts
-│   │   ├── darkMode.svelte.ts  modal.svelte.ts  constants.ts  utils.ts
+│   │   ├── darkMode.svelte.ts  modal.svelte.ts  constants.ts  api.ts (browser /api client)
 │   │   ├── core/                 # pure, isomorphic, fully unit-tested
 │   │   │   ├── playlistParser.ts     # M3U → PlaylistItem[] [5.2]
 │   │   │   ├── channelsXml.ts        # Mapping[] → channels.xml string [5.7]
@@ -156,12 +156,18 @@ Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src
 │   │   │   ├── slug.ts               # slugify + NFR-SEC-3 slug check
 │   │   │   ├── xmltvId.ts            # xmltv_id format + country suffix
 │   │   │   ├── staleMappings.ts      # mark mappings whose entry vanished [FR-P-8]
+│   │   │   ├── channelRows.ts        # editor rows + per-status counts [FR-P-1, FR-L-2]
+│   │   │   ├── playlistDiff.ts       # re-import diff: added / removed / renamed [FR-M-6]
+│   │   │   ├── mappingValidation.ts  # manual entry checks + mapping request shape [FR-E-2]
+│   │   │   ├── formValues.ts         # list / optional-integer form fields
 │   │   │   └── escapeString.ts       # port of epg's escapeString
 │   │   ├── models/               # Lineup, PlaylistItem, Mapping, GuideEntry
 │   │   └── server/               # server-only (Node fs, child_process)
 │   │       ├── config.ts             # env parsing with defaults [§7]
 │   │       ├── storage.ts            # atomic JSON/text read/write under STORAGE_DIR
-│   │       ├── lineupStore.ts        # CRUD over /data/lineups
+│   │       ├── lineupStore.ts        # CRUD over /data/lineups; per-lineup write queue
+│   │       ├── fetchPlaylist.ts      # M3U URL fetch with NFR-SEC-2 limits
+│   │       ├── playlistInput.ts      # M3U from a form (upload or URL)
 │   │       ├── guideIndex.ts         # build/search index; reload on sync.json change
 │   │       ├── database.ts           # @iptv-org/sdk DataManager over /data/epg/temp/data
 │   │       ├── epgRepo.ts            # clone/fetch/reset/npm ci/api:load
@@ -176,7 +182,8 @@ Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src
 │   └── routes/
 │       ├── +layout.svelte  +page.svelte  +page.server.ts
 │       ├── lineups/new/
-│       ├── lineups/[slug]/{+page,settings,runs}/
+│       ├── lineups/[slug]/{+page,settings,settings/reimport,runs}/
+│       ├── lineups/[slug]/channels.xml/+server.ts   # preview / ?download [FR-X-6]
 │       ├── status/
 │       ├── guides/[file]/+server.ts       # FR-R-5
 │       └── api/
@@ -202,12 +209,12 @@ Writes from forms use SvelteKit **form actions** (progressive enhancement); inte
 3. `lineupStore.create()` writes `lineup.json`, `source.m3u`, empty `mappings.json`, empty `channels.xml`.
 4. Redirect to editor.
 
-Re-import: parse new playlist → diff by `key` against current → show diff page → on confirm, write `source.m3u`, drop mappings of removed keys, regenerate `channels.xml` [FR-M-6].
+Re-import: parse new playlist → keep it in `lineups/<slug>/pending-source.json` → diff by `key` against current on `/lineups/<slug>/settings/reimport` → on confirm, write `source.m3u`, drop mappings of removed keys (only when the user ticks that), regenerate `channels.xml` [FR-M-6].
 
 ### 5.2 Map a channel
 1. Editor loads lineup + items + mappings (+page.server.ts).
 2. Opening a row → `GET /api/lineups/<slug>/suggestions?key=…` → `matcher.suggest(item, guideIndex, lineup.filters)`.
-3. Confirm → `PUT /api/lineups/<slug>/mappings` `{ key, status, guide }` → validate (FR-E-2) → write `mappings.json` → regenerate `channels.xml` → return updated row.
+3. Confirm → `PUT /api/lineups/<slug>/mappings` with `{ key, status: 'skipped' }`, `{ key, status: 'mapped', entry: { site, site_id } }` (copied from the index, so only existing entries can be saved) or `{ key, status: 'mapped', manual: { site, site_id, lang, xmltv_id } }` (validated, FR-E-2; 422 with field errors) → write `mappings.json` → regenerate `channels.xml` → return updated row. `DELETE ?key=` clears a mapping. Writes to one lineup are queued in-process so concurrent edits don't overwrite each other.
 
 ### 5.3 Sync [5.8]
 Implemented in `server/sync.ts`; the caller holds `run.lock`.

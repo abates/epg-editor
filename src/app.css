@@ -73,3 +73,36 @@ input[type='search']::-webkit-search-results-button,
 input[type='search']::-webkit-search-results-decoration {
   -webkit-appearance: none;
 }
+
+/* Form controls, matching SearchField */
+@utility field {
+  @apply block w-full h-10 px-3 text-sm rounded-md border border-gray-300 bg-white text-gray-900 placeholder-gray-400 outline-blue-500 dark:bg-primary-750 dark:border-primary-700 dark:text-white dark:placeholder-gray-400;
+}
+
+@utility field-label {
+  @apply block mb-1 text-sm font-medium text-gray-900 dark:text-white;
+}
+
+@utility field-hint {
+  @apply mt-1 text-xs text-gray-500 dark:text-gray-400;
+}
+
+@utility field-error {
+  @apply mt-1 text-xs text-red-600 dark:text-red-400;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 h-10 px-4 text-sm font-medium rounded-md border cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+@utility btn-primary {
+  @apply btn border-transparent bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500;
+}
+
+@utility btn-secondary {
+  @apply btn border-gray-200 bg-white text-gray-700 hover:bg-gray-100 dark:border-primary-700 dark:bg-primary-810 dark:text-gray-200 dark:hover:bg-primary-750;
+}
+
+@utility btn-danger {
+  @apply btn border-transparent bg-red-600 text-white hover:bg-red-700;
+}

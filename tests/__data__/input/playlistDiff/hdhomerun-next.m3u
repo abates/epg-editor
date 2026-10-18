@@ -1,0 +1,29 @@
+#EXTM3U
+#EXTINF:-1 channel-id="2.1" channel-number="2.1" tvg-name="WCBS-HD",2.1 WCBS-HD
+http://192.168.1.10:5004/auto/v2.1
+#EXTINF:-1 channel-id="4.1" channel-number="4.1" tvg-name="WNBC-HD",4.1 WNBC-HD
+http://192.168.1.10:5004/auto/v4.1
+#EXTINF:-1 channel-id="4.10" channel-number="4.10" tvg-name="NBC LX",4.10 NBC LX
+http://192.168.1.10:5004/auto/v4.10
+#EXTINF:-1 channel-id="5.1" channel-number="5.1" tvg-name="FOX5-HD",5.1 FOX5-HD
+http://192.168.1.10:5004/auto/v5.1
+#EXTINF:-1 channel-id="7.1" channel-number="7.1" tvg-name="WABC-HD",7.1 WABC-HD
+http://192.168.1.10:5004/auto/v7.1
+#EXTINF:-1 channel-id="11.1" channel-number="11.1" tvg-name="WPIX-HD",11.1 WPIX-HD
+http://192.168.1.10:5004/auto/v11.1
+#EXTINF:-1 channel-id="13.1" channel-number="13.1" tvg-name="WNET-HD",13.1 WNET-HD
+http://192.168.1.10:5004/auto/v13.1
+#EXTINF:-1 channel-id="11.2" channel-number="11.2" tvg-name="WPIX.2",11.2 WPIX.2
+http://192.168.1.10:5004/auto/v11.2
+#EXTINF:-1 channel-id="13.2" channel-number="13.2" tvg-name="WNET 13.2",13.2 WNET 13.2
+http://192.168.1.10:5004/auto/v13.2
+#EXTINF:-1 channel-id="31.1" channel-number="31.1" tvg-name="ION",31.1 ION
+http://192.168.1.10:5004/auto/v31.1
+#EXTINF:-1 channel-id="63.1" channel-number="63.1" tvg-name="Charge!",63.1 Charge!
+http://192.168.1.10:5004/auto/v63.1
+#EXTINF:-1 channel-id="68.1" channel-number="68.1" tvg-name="ION",68.1 ION
+http://192.168.1.10:5004/auto/v68.1
+#EXTINF:-1 channel-id="9.1" channel-number="9.1" tvg-name="WWOR-HD",9.1 WWOR-HD
+http://192.168.1.10:5004/auto/v9.1
+#EXTINF:-1 channel-id="25.1" channel-number="25.1" tvg-name="WNYE-HD",25.1 WNYE-HD
+http://192.168.1.10:5004/auto/v25.1

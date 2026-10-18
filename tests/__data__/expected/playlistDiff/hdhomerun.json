@@ -1,0 +1,12 @@
+{
+  "added": [
+    { "key": "9.1", "number": "9.1", "name": "WWOR-HD" },
+    { "key": "25.1", "number": "25.1", "name": "WNYE-HD" }
+  ],
+  "removed": [
+    { "key": "2.2", "number": "2.2", "name": "StartTV" },
+    { "key": "102.1", "number": "102.1", "name": "WCBS*NX" }
+  ],
+  "renamed": [{ "key": "5.1", "number": "5.1", "from": "WNYW-HD", "to": "FOX5-HD" }],
+  "unchanged": 11
+}
