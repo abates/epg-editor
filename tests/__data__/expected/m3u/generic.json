@@ -1,0 +1,54 @@
+{
+  "items": [
+    {
+      "key": "CNN.us@East",
+      "number": null,
+      "name": "CNN",
+      "url": "http://example.com/cnn.m3u8",
+      "logo": "http://example.com/cnn.png",
+      "group": "News",
+      "attributes": {
+        "tvg-id": "CNN.us@East",
+        "tvg-logo": "http://example.com/cnn.png",
+        "group-title": "News"
+      }
+    },
+    {
+      "key": "101",
+      "number": "101",
+      "name": "BBC One & \"HD\"",
+      "url": "http://example.com/bbc1.m3u8",
+      "logo": null,
+      "group": "News, UK",
+      "attributes": {
+        "tvg-id": "BBCOne.uk@HD",
+        "group-title": "News, UK",
+        "catchup": "default",
+        "catchup-days": "7",
+        "tvg-chno": "101"
+      }
+    },
+    {
+      "key": "http://example.com/rp.mp3",
+      "number": null,
+      "name": "Radio Paradise",
+      "url": "http://example.com/rp.mp3",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "Radio Paradise",
+        "radio": "true"
+      }
+    },
+    {
+      "key": "http://example.com/local.m3u8",
+      "number": null,
+      "name": "Local, Channel",
+      "url": "http://example.com/local.m3u8",
+      "logo": null,
+      "group": null,
+      "attributes": {}
+    }
+  ],
+  "warnings": []
+}

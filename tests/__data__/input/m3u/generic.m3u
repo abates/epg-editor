@@ -1,0 +1,10 @@
+#EXTM3U x-tvg-url="http://example.com/guide.xml"
+#EXTINF:-1 tvg-id="CNN.us@East" tvg-logo="http://example.com/cnn.png" group-title="News",CNN
+#EXTVLCOPT:http-user-agent=Mozilla/5.0
+http://example.com/cnn.m3u8
+#EXTINF:-1 tvg-id="BBCOne.uk@HD" tvg-chno="101" group-title="News, UK" catchup="default" catchup-days="7",BBC One & "HD"
+http://example.com/bbc1.m3u8
+#EXTINF:-1 tvg-name="Radio Paradise" radio="true",Radio Paradise
+http://example.com/rp.mp3
+#EXTINF:0,Local, Channel
+http://example.com/local.m3u8

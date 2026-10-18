@@ -1,0 +1,187 @@
+{
+  "items": [
+    {
+      "key": "2.1",
+      "number": "2.1",
+      "name": "WCBS-HD",
+      "url": "http://192.168.1.10:5004/auto/v2.1",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "WCBS-HD",
+        "channel-id": "2.1",
+        "channel-number": "2.1"
+      }
+    },
+    {
+      "key": "2.2",
+      "number": "2.2",
+      "name": "StartTV",
+      "url": "http://192.168.1.10:5004/auto/v2.2",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "StartTV",
+        "channel-id": "2.2",
+        "channel-number": "2.2"
+      }
+    },
+    {
+      "key": "4.1",
+      "number": "4.1",
+      "name": "WNBC-HD",
+      "url": "http://192.168.1.10:5004/auto/v4.1",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "WNBC-HD",
+        "channel-id": "4.1",
+        "channel-number": "4.1"
+      }
+    },
+    {
+      "key": "4.10",
+      "number": "4.10",
+      "name": "NBC LX",
+      "url": "http://192.168.1.10:5004/auto/v4.10",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "NBC LX",
+        "channel-id": "4.10",
+        "channel-number": "4.10"
+      }
+    },
+    {
+      "key": "5.1",
+      "number": "5.1",
+      "name": "WNYW-HD",
+      "url": "http://192.168.1.10:5004/auto/v5.1",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "WNYW-HD",
+        "channel-id": "5.1",
+        "channel-number": "5.1"
+      }
+    },
+    {
+      "key": "7.1",
+      "number": "7.1",
+      "name": "WABC-HD",
+      "url": "http://192.168.1.10:5004/auto/v7.1",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "WABC-HD",
+        "channel-id": "7.1",
+        "channel-number": "7.1"
+      }
+    },
+    {
+      "key": "11.1",
+      "number": "11.1",
+      "name": "WPIX-HD",
+      "url": "http://192.168.1.10:5004/auto/v11.1",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "WPIX-HD",
+        "channel-id": "11.1",
+        "channel-number": "11.1"
+      }
+    },
+    {
+      "key": "13.1",
+      "number": "13.1",
+      "name": "WNET-HD",
+      "url": "http://192.168.1.10:5004/auto/v13.1",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "WNET-HD",
+        "channel-id": "13.1",
+        "channel-number": "13.1"
+      }
+    },
+    {
+      "key": "11.2",
+      "number": "11.2",
+      "name": "WPIX.2",
+      "url": "http://192.168.1.10:5004/auto/v11.2",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "WPIX.2",
+        "channel-id": "11.2",
+        "channel-number": "11.2"
+      }
+    },
+    {
+      "key": "13.2",
+      "number": "13.2",
+      "name": "WNET 13.2",
+      "url": "http://192.168.1.10:5004/auto/v13.2",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "WNET 13.2",
+        "channel-id": "13.2",
+        "channel-number": "13.2"
+      }
+    },
+    {
+      "key": "31.1",
+      "number": "31.1",
+      "name": "ION",
+      "url": "http://192.168.1.10:5004/auto/v31.1",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "ION",
+        "channel-id": "31.1",
+        "channel-number": "31.1"
+      }
+    },
+    {
+      "key": "63.1",
+      "number": "63.1",
+      "name": "Charge!",
+      "url": "http://192.168.1.10:5004/auto/v63.1",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "Charge!",
+        "channel-id": "63.1",
+        "channel-number": "63.1"
+      }
+    },
+    {
+      "key": "68.1",
+      "number": "68.1",
+      "name": "ION",
+      "url": "http://192.168.1.10:5004/auto/v68.1",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "ION",
+        "channel-id": "68.1",
+        "channel-number": "68.1"
+      }
+    },
+    {
+      "key": "102.1",
+      "number": "102.1",
+      "name": "WCBS*NX",
+      "url": "http://192.168.1.10:5004/auto/v102.1",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "WCBS*NX",
+        "channel-id": "102.1",
+        "channel-number": "102.1"
+      }
+    }
+  ],
+  "warnings": []
+}

@@ -153,6 +153,7 @@ Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src
 │   │   │   ├── playlistParser.ts     # M3U → PlaylistItem[] [5.2]
 │   │   │   ├── channelsXml.ts        # Mapping[] → channels.xml string [5.7]
 │   │   │   ├── matcher.ts            # features + scoring [5.4]
+│   │   │   ├── slug.ts               # slugify + NFR-SEC-3 slug check
 │   │   │   └── escapeString.ts       # port of epg's escapeString
 │   │   ├── models/               # Lineup, PlaylistItem, Mapping, GuideEntry
 │   │   └── server/               # server-only (Node fs, child_process)
@@ -232,10 +233,13 @@ Pipe stdout/stderr to the run log; parse `[i/total]` lines for progress; on exit
 | CLI parsing | `commander` |
 | Cron | `@freearhey/chronos` (as epg's `pm2.config.js`) |
 | Process manager | `pm2` / `pm2-runtime` |
-| XML escaping | port of epg's `escapeString` (keep identical behaviour, with test) |
+| XML escaping | port of epg's `escapeString` (keep identical behaviour, with test). `epg-grabber` has a copy but doesn't export it; generic XML builders don't strip invalid characters or collapse whitespace the way epg does |
+| M3U parsing | `@iptv/playlist`, behind a line filter in `playlistParser.ts` that works around an infinite loop on malformed input ([upstream/iptv-playlist-infinite-loop.md](upstream/iptv-playlist-infinite-loop.md)) |
+| Atomic writes | `write-file-atomic` (temp file + fsync + rename). `@freearhey/storage-js` writes in place, so it isn't used for writes |
+| Slugs | `slugify` (`strict`, lower-case), then checked against the NFR-SEC-3 pattern |
 | UI components | port from iptv-org.github.io `src/lib/components/Common` + icons (public domain / Unlicense) |
 | Toasts | `@zerodevx/svelte-toast` with the site's options |
-| Natural sort | `natural-orderby` (used by the site) |
+| Natural sort | `natural-orderby` (used by the site) for UI lists. Channel numbers use `compareChannelNumbers` in `channelsXml.ts`, because natural-orderby sorts `2.10` before `2.1` |
 
 The interactive CLI `scripts/commands/channels/edit.ts` in iptv-org/epg is the closest existing equivalent of this app's mapping flow (search → pick channel → pick feed); the UI should follow the same two-step channel → feed concept for manual `xmltv_id` selection.
 

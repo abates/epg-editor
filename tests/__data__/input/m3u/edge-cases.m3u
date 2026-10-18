@@ -1,0 +1,14 @@
+﻿
+#EXTINF:-1 channel-number="2.1" tvg-name="WCBS-HD",2.1 WCBS-HD
+http://192.168.1.10:5004/auto/v2.1
+
+junk line between entries
+#EXTINF:-1 channel-number="2.1",2.1 WCBS-HD Backup
+http://192.168.1.10:5004/auto/v2.1b
+#EXTINF:-1 tvg-id=unquoted,Unquoted Attribute
+http://example.com/unquoted
+#EXTINF:-1,9.1 Plain Title
+http://example.com/plain
+#EXTINF:-1,No Number
+
+http://example.com/no-number

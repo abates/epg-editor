@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<channels>
+  <channel site="tvtv.us" site_id="10098" lang="en" xmltv_id="WCBSTV.us@SD" lcn="2.1">WCBS-HD</channel>
+  <channel site="tvtv.us" site_id="10099" lang="en" xmltv_id="WNBC.us@SD" lcn="4.1">WNBC-HD</channel>
+  <channel site="example.local" site_id="nbc lx &amp; &quot;more&quot;" lang="en" xmltv_id="" lcn="4.10">NBC LX</channel>
+  <channel site="tvtv.us" site_id="10003" lang="en" xmltv_id="WABCTV.us@SD" lcn="7.1">WABC-HD</channel>
+  <channel site="tvtv.us" site_id="10045" lang="" xmltv_id="WNETTV.us@SD" lcn="13.1">WNET-HD</channel>
+</channels>

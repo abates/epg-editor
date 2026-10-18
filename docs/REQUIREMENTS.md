@@ -134,7 +134,7 @@ Concept: sites that are not (yet) in iptv-org/epg are developed **outside** this
 | --- | --- | --- |
 | FR-X-1 | MUST | One file per lineup at `/data/lineups/<slug>/channels.xml`, regenerated on every mapping change and after sync. Written atomically (temp file + rename). |
 | FR-X-2 | MUST | Format compatible with iptv-org/epg, attributes in this order: `<channel site="" site_id="" lang="" xmltv_id="" lcn="" [logo=""]>Display Name</channel>`, XML declaration `<?xml version="1.0" encoding="UTF-8"?>`, values escaped like epg's `escapeString`. |
-| FR-X-3 | MUST | `lcn` = M3U channel number (FR-M-5) so the generated guide carries `<lcn>` for Plex channel-number matching. *(Verified: `epg-grabber` parses `lcn` and emits `<lcn>`; epg's own `generateChannelsXML` drops it, so do not reuse that helper.)* |
+| FR-X-3 | MUST | `lcn` = M3U channel number (FR-M-5) so the generated guide carries `<lcn>` for Plex channel-number matching. *(Verified: `epg-grabber` parses `lcn` and emits `<lcn>`; epg's own `generateChannelsXML` drops it, so do not reuse that helper. End-to-end `grab` run: [spikes/M1-lcn.md](spikes/M1-lcn.md).)* |
 | FR-X-4 | MUST | Display name = M3U channel name (e.g. `WCBS-HD`), not the guide entry's name; this becomes `<display-name>` in the guide. |
 | FR-X-5 | MUST | Only Mapped channels are written; order by channel number. |
 | FR-X-6 | SHOULD | Download button for `channels.xml` in the UI; read-only preview. |
@@ -240,6 +240,6 @@ Names deliberately avoid iptv-org/epg's own env vars (`DATA_DIR`, `SITES_DIR`, `
 
 ## 9. Open questions
 
-- **OQ-1** — Need a real HDHomeRun `lineup.m3u` sample (sanitised) for fixtures; attribute names in FR-M-3 are based on common HDHomeRun / IPTV conventions and must be confirmed against it.
+- **OQ-1** — Need a real HDHomeRun `lineup.m3u` sample (sanitised) for fixtures; attribute names in FR-M-3 are based on common HDHomeRun / IPTV conventions and must be confirmed against it. *Resolved 2026-10-18: checked against a real `lineup.m3u` from an HDHR5-4K (firmware `hdhomerun5_atsc3` 20260326, 73 channels incl. ATSC 3.0). Every entry is `#EXTINF:-1 channel-id="N" channel-number="N" tvg-name="Name",N Name`, followed by `http://<ip>:5004/auto/vN`. No `tvg-id`, `tvg-chno`, `tvg-logo` or `group-title`; LF line endings, no BOM. The fixture `tests/__data__/input/m3u/hdhomerun.m3u` uses this format.*
 - **OQ-2** — Confirm Plex matches XMLTV channels to tuner channels via `<lcn>` / numeric display name for HDHomeRun DVR; if not, consider emitting the number as an extra `<display-name>` (would require a post-process step since epg-grabber writes a single display-name).
 - **OQ-3** — Some upstream US sites (e.g. `tvtv.us`) hard-code a lineup ID in their config URL. Check whether OTA station `site_id`s work regardless of lineup; if not, overlay copies of those sites may be needed (document in README).

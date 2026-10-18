@@ -1,0 +1,50 @@
+{
+  "items": [
+    {
+      "key": "2.1",
+      "number": "2.1",
+      "name": "WCBS-HD",
+      "url": "http://192.168.1.10:5004/auto/v2.1",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "tvg-name": "WCBS-HD",
+        "channel-number": "2.1"
+      }
+    },
+    {
+      "key": "2.1#2",
+      "number": "2.1",
+      "name": "WCBS-HD Backup",
+      "url": "http://192.168.1.10:5004/auto/v2.1b",
+      "logo": null,
+      "group": null,
+      "attributes": {
+        "channel-number": "2.1"
+      }
+    },
+    {
+      "key": "http://example.com/plain",
+      "number": "9.1",
+      "name": "Plain Title",
+      "url": "http://example.com/plain",
+      "logo": null,
+      "group": null,
+      "attributes": {}
+    },
+    {
+      "key": "http://example.com/no-number",
+      "number": null,
+      "name": "No Number",
+      "url": "http://example.com/no-number",
+      "logo": null,
+      "group": null,
+      "attributes": {}
+    }
+  ],
+  "warnings": [
+    "line 5: unrecognised line skipped",
+    "line 8: malformed #EXTINF attributes, entry skipped",
+    "duplicate key \"2.1\" for \"2.1 WCBS-HD Backup\", renamed to \"2.1#2\""
+  ]
+}

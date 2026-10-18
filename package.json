@@ -25,6 +25,7 @@
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.5",
+    "@types/write-file-atomic": "^4.0.3",
     "@zerodevx/svelte-toast": "^0.9.6",
     "eslint": "^10.13.0",
     "eslint-plugin-svelte": "^3.23.1",
@@ -42,7 +43,11 @@
   },
   "dependencies": {
     "@freearhey/core": "^0.16.1",
+    "@iptv/playlist": "^1.2.1",
     "commander": "^15.0.0",
-    "tsx": "^4.23.15"
+    "epg-grabber": "^0.48.0",
+    "slugify": "^1.6.9",
+    "tsx": "^4.23.15",
+    "write-file-atomic": "^7.0.1"
   }
 }

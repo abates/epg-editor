@@ -1,1 +1,2 @@
 * text=auto eol=lf
+tests/__data__/input/m3u/edge-cases.m3u -text

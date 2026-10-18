@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "items": {
+    "13.1": {
+      "status": "mapped",
+      "guide": { "site": "tvtv.us", "site_id": "10045", "lang": null, "xmltv_id": "WNETTV.us@SD", "name": "WNET", "origin": "upstream" },
+      "updatedAt": "2026-10-18T00:00:00.000Z"
+    },
+    "2.1": {
+      "status": "mapped",
+      "guide": { "site": "tvtv.us", "site_id": "10098", "lang": "en", "xmltv_id": "WCBSTV.us@SD", "name": "WCBS", "origin": "upstream" },
+      "updatedAt": "2026-10-18T00:00:00.000Z"
+    },
+    "2.2": {
+      "status": "skipped",
+      "updatedAt": "2026-10-18T00:00:00.000Z"
+    },
+    "4.10": {
+      "status": "mapped",
+      "guide": { "site": "example.local", "site_id": "nbc lx & \"more\"", "lang": "en", "xmltv_id": "", "name": "NBC LX", "origin": "overlay" },
+      "updatedAt": "2026-10-18T00:00:00.000Z"
+    },
+    "4.1": {
+      "status": "mapped",
+      "guide": { "site": "tvtv.us", "site_id": "10099", "lang": "en", "xmltv_id": "WNBC.us@SD", "name": "WNBC", "origin": "manual" },
+      "updatedAt": "2026-10-18T00:00:00.000Z"
+    },
+    "7.1": {
+      "status": "mapped",
+      "guide": { "site": "tvtv.us", "site_id": "10003", "lang": "en", "xmltv_id": "WABCTV.us@SD", "name": "WABC", "origin": "upstream" },
+      "stale": true,
+      "updatedAt": "2026-10-18T00:00:00.000Z"
+    },
+    "removed.key": {
+      "status": "mapped",
+      "guide": { "site": "tvtv.us", "site_id": "1", "lang": "en", "xmltv_id": "Gone.us", "name": "Gone", "origin": "upstream" },
+      "updatedAt": "2026-10-18T00:00:00.000Z"
+    }
+  }
+}
