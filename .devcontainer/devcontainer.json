@@ -1,0 +1,37 @@
+{
+  "name": "epg-editor",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "containerEnv": {
+    "STORAGE_DIR": "${containerWorkspaceFolder}/dev-data",
+    "ORIGIN": "http://localhost:4173"
+  },
+  "forwardPorts": [5173, 4173],
+  "portsAttributes": {
+    "5173": { "label": "vite dev", "onAutoForward": "notify" },
+    "4173": { "label": "vite preview / node build", "onAutoForward": "silent" }
+  },
+  "postCreateCommand": "npm ci",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "svelte.svelte-vscode",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "vitest.explorer"
+      ],
+      "settings": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "files.eol": "\n",
+        "[svelte]": { "editor.defaultFormatter": "svelte.svelte-vscode" },
+        "eslint.validate": ["javascript", "typescript", "svelte"],
+        "files.associations": { "*.css": "tailwindcss" }
+      }
+    }
+  },
+  "remoteUser": "node"
+}
