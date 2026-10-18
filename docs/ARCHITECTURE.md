@@ -171,7 +171,8 @@ Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src
 │   │       ├── spawn.ts              # nano-spawn with argument arrays + sanitised env
 │   │       ├── runLog.ts             # per-run log file under /data/logs + tail + rotation
 │   │       ├── lock.ts               # run.lock via proper-lockfile (mtime-based stale detection)
-│   │       └── jobs.ts               # spawn detached commands from the web process
+│   │       ├── jobs.ts               # spawn detached commands from the web process
+│   │       └── services.ts           # web-process singletons: lineups, index, matcher, database
 │   └── routes/
 │       ├── +layout.svelte  +page.svelte  +page.server.ts
 │       ├── lineups/new/
@@ -239,7 +240,7 @@ Pipe stdout/stderr to the run log; parse `[i/total]` lines for progress; on exit
 | --- | --- |
 | Parse `*.channels.xml` | `EPGGrabber.parseChannelsXML` (`epg-grabber`, same version range as epg) |
 | iptv-org database (channels, feeds, alt names) | `@iptv-org/sdk` `DataManager({ dataDir }).loadFromDisk()` pointed at `/data/epg/temp/data` (epg's `api:load` already downloads it) |
-| Search index | `sdk.SearchEngine.createIndex` / `@freearhey/search-js` as epg's `searchChannels` does |
+| Search index | `minisearch` for matcher candidates, the entry Search tab and `xmltv_id` autocomplete. epg's `searchChannels` uses `@freearhey/search-js`, which filters without ranking and is too slow over ~180k guide entries (FR-S-6). Final ranking is `matcher.ts`'s own scoring |
 | Collections, logging | `@freearhey/core` (`Collection`, `Dictionary`, `Logger`) |
 | CLI parsing | `commander` |
 | Cron | `@freearhey/chronos` (as epg's `pm2.config.js`) |

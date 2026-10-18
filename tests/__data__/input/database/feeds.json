@@ -1,0 +1,189 @@
+[
+  {
+    "channel": "StartTV.us",
+    "id": "SD",
+    "name": "SD",
+    "alt_names": [],
+    "is_main": true,
+    "broadcast_area": [
+      "c/US"
+    ],
+    "timezones": [
+      "America/New_York"
+    ],
+    "languages": [
+      "eng"
+    ],
+    "format": "480i"
+  },
+  {
+    "channel": "StartTV.us",
+    "id": "K14HCD",
+    "name": "K14HC-D",
+    "alt_names": [],
+    "is_main": false,
+    "broadcast_area": [
+      "ct/USPRC"
+    ],
+    "timezones": [
+      "America/Phoenix"
+    ],
+    "languages": [
+      "eng"
+    ],
+    "format": "480i"
+  },
+  {
+    "channel": "StartTV.us",
+    "id": "K27HPD",
+    "name": "K27HP-D",
+    "alt_names": [],
+    "is_main": false,
+    "broadcast_area": [
+      "ct/USALM"
+    ],
+    "timezones": [
+      "America/Denver"
+    ],
+    "languages": [
+      "eng"
+    ],
+    "format": "480i"
+  },
+  {
+    "channel": "IONTV.us",
+    "id": "East",
+    "name": "East",
+    "alt_names": [],
+    "is_main": true,
+    "broadcast_area": [
+      "c/US"
+    ],
+    "timezones": [
+      "America/New_York"
+    ],
+    "languages": [
+      "eng"
+    ],
+    "format": "480i"
+  },
+  {
+    "channel": "IONTV.us",
+    "id": "Central",
+    "name": "Central",
+    "alt_names": [],
+    "is_main": false,
+    "broadcast_area": [
+      "c/US"
+    ],
+    "timezones": [
+      "America/Chicago"
+    ],
+    "languages": [
+      "eng"
+    ],
+    "format": "480i"
+  },
+  {
+    "channel": "IONTV.us",
+    "id": "K19FFD",
+    "name": "K19FF-D",
+    "alt_names": [],
+    "is_main": false,
+    "broadcast_area": [
+      "ct/USMLS"
+    ],
+    "timezones": [
+      "America/Denver"
+    ],
+    "languages": [
+      "eng"
+    ],
+    "format": "480i"
+  },
+  {
+    "channel": "Charge.us",
+    "id": "SD",
+    "name": "SD",
+    "alt_names": [],
+    "is_main": true,
+    "broadcast_area": [
+      "c/US"
+    ],
+    "timezones": [
+      "America/New_York"
+    ],
+    "languages": [
+      "eng"
+    ],
+    "format": "480i"
+  },
+  {
+    "channel": "Charge.us",
+    "id": "K27HPD",
+    "name": "K27HP-D",
+    "alt_names": [],
+    "is_main": false,
+    "broadcast_area": [
+      "ct/USALM"
+    ],
+    "timezones": [
+      "America/Denver"
+    ],
+    "languages": [
+      "eng"
+    ],
+    "format": "480i"
+  },
+  {
+    "channel": "Charge.us",
+    "id": "KABCTV",
+    "name": "KABC-TV",
+    "alt_names": [],
+    "is_main": false,
+    "broadcast_area": [
+      "ct/USLAX"
+    ],
+    "timezones": [
+      "America/Santiago"
+    ],
+    "languages": [
+      "eng"
+    ],
+    "format": "480i"
+  },
+  {
+    "channel": "NBCLX.us",
+    "id": "SD",
+    "name": "SD",
+    "alt_names": [],
+    "is_main": true,
+    "broadcast_area": [
+      "c/US"
+    ],
+    "timezones": [
+      "America/New_York"
+    ],
+    "languages": [
+      "eng"
+    ],
+    "format": "480i"
+  },
+  {
+    "channel": "BobEsponjaCalcaQuadrada.us",
+    "id": "BR",
+    "name": "BR",
+    "alt_names": [],
+    "is_main": true,
+    "broadcast_area": [
+      "c/BR"
+    ],
+    "timezones": [
+      "America/Sao_Paulo"
+    ],
+    "languages": [
+      "por"
+    ],
+    "format": "720p"
+  }
+]

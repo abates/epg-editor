@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<channels>
+  <channel site="tvtv.us" site_id="16689" lang="en" xmltv_id="WCBSTV21.us@HD">CBS (WCBS-DT1) New York, NY</channel>
+  <channel site="tvtv.us" site_id="20360" lang="en" xmltv_id="WNYW51.us@HD">FOX (WNYW-DT1) New York, NY</channel>
+  <channel site="tvtv.us" site_id="20373" lang="en" xmltv_id="WPIX71.us@HD">CW (WPIX-DT1) NY</channel>
+  <channel site="tvtv.us" site_id="20453" lang="en" xmltv_id="WABCTV71.us@HD">ABC (WABC-DT1) New York, NY</channel>
+  <channel site="tvtv.us" site_id="20459" lang="en" xmltv_id="WNBC471.us@HD">NBC (WNBC-DT1) New York, NY</channel>
+  <channel site="tvtv.us" site_id="26182" lang="en" xmltv_id="WNET211.us@HD">PBS (WNET-DT1) New York, NY</channel>
+  <channel site="tvtv.us" site_id="30763" lang="en" xmltv_id="WNYW52.us@SD">Movies! (WNYW-DT2) New York, NY</channel>
+  <channel site="tvtv.us" site_id="31734" lang="en" xmltv_id="WPBSTV164.us@SD">PBS Kids (WPBS-DT4) Watertown, NY</channel>
+  <channel site="tvtv.us" site_id="31780" lang="en" xmltv_id="WNET132.us@SD">PBS Kids (WNET-DT2) New York, NY</channel>
+  <channel site="tvtv.us" site_id="34921" lang="en" xmltv_id="WNEDTV173.us@SD">PBS Kids (WNED3) Buffalo, NY</channel>
+  <channel site="tvtv.us" site_id="35230" lang="en" xmltv_id="WABCTV72.us@SD">Localish (WABC-DT2) New York, NY</channel>
+  <channel site="tvtv.us" site_id="43818" lang="en" xmltv_id="WPXNTV311.us@HD">ION (WPXN-DT1) New York, NY</channel>
+  <channel site="tvtv.us" site_id="44936" lang="en" xmltv_id="WNBC472.us@SD">Cozi TV (WNBC-DT2) New York, NY</channel>
+  <channel site="tvtv.us" site_id="47796" lang="en" xmltv_id="WGRZ22.us@SD">Antenna TV (WGRZ2) Buffalo, NY</channel>
+  <channel site="tvtv.us" site_id="50276" lang="en" xmltv_id="WABCTV73.us@SD">This TV (WABC-DT3) New York, NY</channel>
+  <channel site="tvtv.us" site_id="50777" lang="en" xmltv_id="WPIX112.us@HD">Antenna TV (WPIX-DT2) NY</channel>
+  <channel site="tvtv.us" site_id="54618" lang="en" xmltv_id="WPXNTV312.us@HD">Bounce (WPXN-DT2) New York, NY</channel>
+  <channel site="tvtv.us" site_id="55285" lang="en" xmltv_id="WPXNTV313.us@SD">ION Mystery (WPXN-DT3) New York, NY</channel>
+  <channel site="tvtv.us" site_id="55347" lang="en" xmltv_id="WPXNTV314.us@SD">DEFY (WPXN-DT4) New York, NY</channel>
+  <channel site="tvtv.us" site_id="65092" lang="en" xmltv_id="WPIXDT3.us@SD">Court TV (WPIX-DT3) NY</channel>
+  <channel site="tvtv.us" site_id="70260" lang="en" xmltv_id="WPIX114.us@HD">Rewind TV (WPIX-DT4) NY</channel>
+  <channel site="tvtv.us" site_id="74916" lang="en" xmltv_id="WCBSTV212.us@SD">Start TV (WCBS-DT2) New York, NY</channel>
+  <channel site="tvtv.us" site_id="81334" lang="en" xmltv_id="WNYW53.us@SD">FOX Weather OTA (WNYW-DT3) New York, NY</channel>
+  <channel site="tvtv.us" site_id="82708" lang="en" xmltv_id="WPXNTV315.us@SD">Laff (WPXN-DT5) New York, NY</channel>
+  <channel site="tvtv.us" site_id="83518" lang="en" xmltv_id="WPXNTV316.us@SD">TrueReal (WPXN-DT6) New York, NY</channel>
+  <channel site="tvtv.us" site_id="91397" lang="en" xmltv_id="WUTV293.us@SD">Charge! (WUTV3) Buffalo, NY</channel>
+  <channel site="tvtv.us" site_id="97965" lang="en" xmltv_id="WNYW54.us@SD">The Grio TV (WNYW-DT4) New York, NY</channel>
+  <channel site="tvtv.us" site_id="99163" lang="en" xmltv_id="WJLP334.us@SD">ION Mystery (WJLP-DT4) New York, NY</channel>
+  <channel site="tvtv.us" site_id="112501" lang="en" xmltv_id="WCBSTV23.us@SD">Dabl (WCBS-DT3) New York, NY</channel>
+  <channel site="tvtv.us" site_id="112941" lang="en" xmltv_id="WNYW55.us@SD">Decades (WNYW-DT5) New York, NY</channel>
+  <channel site="tvtv.us" site_id="113297" lang="en" xmltv_id="WLNYTV554.us@SD">Start TV (WLNY-DT4) New York, NY</channel>
+  <channel site="tvtv.us" site_id="117203" lang="en" xmltv_id="WCBSTV24.us@SD">FAVE TV (WCBS-DT4) New York, NY</channel>
+  <channel site="tvtv.us" site_id="119697" lang="en" xmltv_id="WABCTV74.us@SD">HSN (WABC-DT4) New York, NY</channel>
+  <channel site="tvtv.us" site_id="121325" lang="en" xmltv_id="WPXNTV317.us@SD">Newsy (WPXN-DT7) New York, NY</channel>
+  <channel site="tvtv.us" site_id="15800" lang="en" xmltv_id="K26GSD262.us@SD">CHARGE! (K26GS-D2) Harrison, AR</channel>
+  <channel site="tvtv.us" site_id="17832" lang="en" xmltv_id="K14JSD144.us@SD">CHARGE! (K14JS-D4) Denver, CO</channel>
+  <channel site="tvtv.us" site_id="18633" lang="en" xmltv_id="IONTV.us@East">ION TV East</channel>
+  <channel site="tvtv.us" site_id="31039" lang="en" xmltv_id="KNXVTV152.us@HD">Antenna TV(KNXV-DT2) Arizona, PX</channel>
+  <channel site="tvtv.us" site_id="31044" lang="en" xmltv_id="WGNDT2.us@SD">Antenna TV (WGN-DT2) Chicago, IL</channel>
+  <channel site="tvtv.us" site_id="31262" lang="en" xmltv_id="KTCATV24.us@HD">PBS Kids (KTCA-DT4) St Paul, MN</channel>
+  <channel site="tvtv.us" site_id="114278" lang="en" xmltv_id="NBCLX.us@SD">NBCLX (National)</channel>
+  <channel site="tvtv.us" site_id="63644" lang="en" xmltv_id="WTVJDT3.us@SD">NBCLX (WTVJ-DT3) Miami, FL</channel>
+  <channel site="tvtv.us" site_id="109454" lang="en" xmltv_id="StartTV.us@SD">Start TV</channel>
+  <channel site="tvtv.us" site_id="102148" lang="en" xmltv_id="Charge.us@SD">Charge!</channel>
+  <channel site="tvtv.us" site_id="40465" lang="en" xmltv_id="KPRCTV22.us@SD">Start TV (KPRC-DT2) Houston TX</channel>
+</channels>

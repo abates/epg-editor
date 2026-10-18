@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<channels>
+  <channel site="epgshare01.online" site_id="CA1#WPIX.New.York.(SUPERSTATION).ca" lang="en" xmltv_id="">WPIX New York (SUPERSTATION)</channel>
+  <channel site="epgshare01.online" site_id="CA1#WPIX.New.York.(SUPERSTATION).HD.ca" lang="en" xmltv_id="">WPIX New York (SUPERSTATION) HD</channel>
+  <channel site="epgshare01.online" site_id="US1#ABC.(WABC).New.York,.NY.us" lang="en" xmltv_id="">ABC (WABC) New York, NY</channel>
+  <channel site="epgshare01.online" site_id="US1#CBS.(WCBS).New.York,.NY.us" lang="en" xmltv_id="">CBS (WCBS) New York, NY</channel>
+  <channel site="epgshare01.online" site_id="US1#FOX.(WNYW).New.York,.NY.us" lang="en" xmltv_id="">FOX (WNYW) New York, NY</channel>
+  <channel site="epgshare01.online" site_id="US1#NBC.(WNBC).New.York,.NY.us" lang="en" xmltv_id="">NBC (WNBC) New York, NY</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#ABC.(WABC).New.York,.NY.us" lang="en" xmltv_id="">ABC (WABC) New York, NY</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#CBS.(WCBS).New.York,.NY.us" lang="en" xmltv_id="">CBS (WCBS) New York, NY</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#FOX.(WNYW).New.York,.NY.us" lang="en" xmltv_id="">FOX (WNYW) New York, NY</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#Localish.(WABC-DT2).New.York,.NY.us" lang="en" xmltv_id="">Localish (WABC-DT2) New York, NY</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#MNT.(WNYW3).New.York,.NY.us" lang="en" xmltv_id="">MNT (WNYW3) New York, NY</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#NBC.(WNBC).New.York,.NY.us" lang="en" xmltv_id="">NBC (WNBC) New York, NY</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#PBS.(WNET).New.York,.NY.us" lang="en" xmltv_id="">PBS (WNET) New York, NY</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#Rewind.TV.East.(WPIX-DT4).us" lang="en" xmltv_id="">Rewind TV East (WPIX-DT4)</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#V-Me.(WNET-DT3).New.York,.NY.us" lang="en" xmltv_id="">V-Me (WNET-DT3) New York, NY</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#WPIX.New.York.(SUPERSTATION).us" lang="en" xmltv_id="">WPIX New York (SUPERSTATION)</channel>
+  <channel site="epgshare01.online" site_id="AU1#AntennaPacific.au" lang="en" xmltv_id="">Antenna Pacific</channel>
+  <channel site="epgshare01.online" site_id="CH1#Antenna.3.ch" lang="de" xmltv_id="">Antenna 3</channel>
+  <channel site="epgshare01.online" site_id="GR1#Antenna.Comedy.gr" lang="el" xmltv_id="">Antenna Comedy</channel>
+  <channel site="epgshare01.online" site_id="GR1#Antenna.Drama.gr" lang="el" xmltv_id="">Antenna Drama</channel>
+  <channel site="epgshare01.online" site_id="GR1#IONIAN.gr" lang="el" xmltv_id="">IONIAN</channel>
+  <channel site="epgshare01.online" site_id="GR1#Ionian.TV.gr" lang="el" xmltv_id="">Ionian TV</channel>
+  <channel site="epgshare01.online" site_id="IN4#BEST.RECHARGE.OFFER.in" lang="en" xmltv_id="">BEST RECHARGE OFFER</channel>
+  <channel site="epgshare01.online" site_id="IN4#RECHARGE.REMINDER.in" lang="en" xmltv_id="">RECHARGE REMINDER</channel>
+  <channel site="epgshare01.online" site_id="NG1#PBS.Kids.ng" lang="en" xmltv_id="">PBS Kids</channel>
+  <channel site="epgshare01.online" site_id="PLEX1#plex.tv.Ion.Mystery.plex" lang="en" xmltv_id="">Ion Mystery</channel>
+  <channel site="epgshare01.online" site_id="PLEX1#plex.tv.ION.plex" lang="en" xmltv_id="">ION</channel>
+  <channel site="epgshare01.online" site_id="PLEX1#plex.tv.ION.Plus.plex" lang="en" xmltv_id="">ION Plus</channel>
+  <channel site="epgshare01.online" site_id="PT1#Casa.e.Cozinha.HD.pt" lang="pt" xmltv_id="">Casa e Cozinha HD</channel>
+  <channel site="epgshare01.online" site_id="UK1#iON.TV.uk" lang="en" xmltv_id="">iON TV</channel>
+  <channel site="epgshare01.online" site_id="US1#ION..-.Eastern.Feed.us" lang="en" xmltv_id="">ION - Eastern Feed</channel>
+  <channel site="epgshare01.online" site_id="US1#ION.Plus.TV.us" lang="en" xmltv_id="">ION Plus TV</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#Antenna.TV.us" lang="en" xmltv_id="">Antenna TV</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#Antenna/MNT.(KAYU-TV2).Spokane,.WA.us" lang="en" xmltv_id="">Antenna/MNT (KAYU-TV2) Spokane, WA</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#Antenna/MNT.(WINK-DT2).Fort.Myers,.FL.us" lang="en" xmltv_id="">Antenna/MNT (WINK-DT2) Fort Myers, FL</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#Charge.TV.us" lang="en" xmltv_id="">Charge TV</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#Cozi.TV.us" lang="en" xmltv_id="">Cozi TV</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#Ion.Mystery.us" lang="en" xmltv_id="">Ion Mystery</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#ION.Shop.TV.Central.us" lang="en" xmltv_id="">ION Shop TV Central</channel>
+  <channel site="epgshare01.online" site_id="US_LOCALS2#ION.TV.East.us" lang="en" xmltv_id="">ION TV East</channel>
+</channels>

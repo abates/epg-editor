@@ -1,0 +1,98 @@
+[
+  {
+    "id": "BobEsponjaCalcaQuadrada.us",
+    "name": "Bob Esponja Calca Quadrada",
+    "alt_names": [
+      "Bob Esponja Calça Quadrada",
+      "Nickelodeon Bob Esponja Calca Quadrada"
+    ],
+    "network": "Pluto TV",
+    "owners": [
+      "Viacom International Inc.",
+      "Pluto Inc.",
+      "Paramount Skydance Corporation"
+    ],
+    "country": "US",
+    "categories": [
+      "kids"
+    ],
+    "is_nsfw": false,
+    "launched": null,
+    "closed": null,
+    "replaced_by": null,
+    "website": "https://pluto.tv/live-tv/bob-esponja-calca-quadrada/details"
+  },
+  {
+    "id": "Charge.us",
+    "name": "Charge!",
+    "alt_names": [],
+    "network": null,
+    "owners": [
+      "Sinclair Broadcast Group"
+    ],
+    "country": "US",
+    "categories": [
+      "movies"
+    ],
+    "is_nsfw": false,
+    "launched": "2017-02-28",
+    "closed": null,
+    "replaced_by": null,
+    "website": "https://watchcharge.com/"
+  },
+  {
+    "id": "IONTV.us",
+    "name": "ION TV",
+    "alt_names": [],
+    "network": "Scripps Networks",
+    "owners": [
+      "ION Media Networks Inc.",
+      "The E.W. Scripps Company"
+    ],
+    "country": "US",
+    "categories": [
+      "entertainment"
+    ],
+    "is_nsfw": false,
+    "launched": "1998-08-31",
+    "closed": null,
+    "replaced_by": null,
+    "website": "https://iontelevision.com/"
+  },
+  {
+    "id": "NBCLX.us",
+    "name": "NBCLX",
+    "alt_names": [],
+    "network": null,
+    "owners": [
+      "NBCUniversal Owned Television Stations"
+    ],
+    "country": "US",
+    "categories": [
+      "entertainment"
+    ],
+    "is_nsfw": false,
+    "launched": "2020-05-01",
+    "closed": "2024-07-16",
+    "replaced_by": null,
+    "website": "https://www.lx.com/"
+  },
+  {
+    "id": "StartTV.us",
+    "name": "Start TV",
+    "alt_names": [],
+    "network": "Weigel Broadcasting;CBS News and Stations",
+    "owners": [
+      "Start TV LLC"
+    ],
+    "country": "US",
+    "categories": [
+      "series"
+    ],
+    "is_nsfw": false,
+    "launched": "2018-09-03",
+    "closed": null,
+    "replaced_by": null,
+    "website": "https://www.starttv.com/"
+  }
+]
