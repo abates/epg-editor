@@ -1,0 +1,270 @@
+# epg-editor — Architecture
+
+Companion to [REQUIREMENTS.md](REQUIREMENTS.md). Requirement IDs in brackets.
+
+## 1. Overview
+
+```
+                     ┌──────────────────────────── container (node:22-alpine) ───────────────────────────┐
+ Browser ──HTTP──►   │  pm2-runtime                                                                      │
+ Plex   ──GET /guides│   ├─ web        node build  (SvelteKit adapter-node, port 3000)                   │
+                     │   │   ├─ UI routes + form actions + /api/* endpoints                              │
+                     │   │   ├─ in-memory GuideIndex (all sites/*.channels.xml + iptv-org database)      │
+                     │   │   └─ serves /data/guides/*.xml(.gz)                                           │
+                     │   ├─ scheduler  chronos -e "npm run run:all" -p $CRON_SCHEDULE                    │
+                     │   ├─ init       npm run run:sync  (only if /data/epg missing)                     │
+                     │   └─ startup    npm run run:all            (only if RUN_AT_STARTUP=true)          │
+                     │                                                                                   │
+                     │  npm run run:all  (tsx src/commands/run/all.ts)                                   │
+                     │     1. acquire /data/run.lock                                                     │
+                     │     2. sync  : git fetch/reset /data/epg → npm ci (if lock changed) → api:load    │
+                     │                → link overlay /data/sites/* into /data/epg/sites/                 │
+                     │     3. for each enabled lineup:                                                   │
+                     │          spawn (cwd /data/epg) npm run grab --- --channels=… --output=…           │
+                     │          → atomic move to /data/guides/<slug>.xml(.gz)                            │
+                     │     4. write status files, release lock                                           │
+                     └───────────────────────────────────────────────────────────────────────────────────┘
+```
+
+The structure deliberately mirrors iptv-org/epg's own container (`pm2.config.js` with `chronos` + an optional startup run) [FR-R-1], with SvelteKit replacing `serve`.
+
+**Why commands run as separate processes:** grab runs are long (minutes to hours), memory-hungry, and must survive web restarts. The web process never runs a grab in-process; "Grab now" / "Sync now" spawn the same command detached (`npm run run:all -- --lineup=<slug>` / `npm run run:sync`) and the lock makes them mutually exclusive with the scheduler [FR-R-3].
+
+**How the web process learns about a sync:** the command writes `/data/status/sync.json` (incl. commit SHA). The web process checks its mtime on request (cheap `stat`, throttled) and rebuilds `GuideIndex` when it changes [FR-G-4]. No IPC needed.
+
+## 2. Volume layout [NFR-DEP-2]
+
+```
+/data
+├── epg/                          # git clone of iptv-org/epg (+ its node_modules, temp/data API json)
+│   └── sites/<site> -> /data/sites/<site>   # overlay symlinks (created by sync)
+├── sites/                        # OVERLAY: user-mounted local site folders [5.6]
+│   └── example.com/{example.com.config.js, example.com.channels.xml, …}
+├── lineups/
+│   └── <slug>/
+│       ├── lineup.json           # metadata + settings
+│       ├── source.m3u            # original playlist, verbatim [FR-M-8]
+│       ├── mappings.json         # key → mapping
+│       └── channels.xml          # generated [5.7]
+├── guides/
+│   ├── <slug>.xml
+│   └── <slug>.xml.gz
+├── status/
+│   ├── sync.json                 # last sync result, SHA, lockfile hash, overlay report
+│   └── runs/<slug>.json          # last 20 runs
+├── logs/
+│   ├── sync-<ts>.log
+│   └── grab-<slug>-<ts>.log      # rotated, keep last 20 per lineup
+├── .epg-sites-shadow/            # upstream site folders moved aside by overlay conflicts [FR-O-3]
+└── run.lock
+```
+
+## 3. Data model (TypeScript)
+
+```ts
+// lineup.json
+interface LineupData {
+  slug: string
+  name: string
+  source: { type: 'upload' | 'url'; url?: string; importedAt: string }
+  filters: { countries: string[]; languages: string[]; preferredSites: string[] }
+  grab: { enabled: boolean; days?: number; maxConnections?: number; delay?: number; timeout?: number; gzip?: boolean }
+  createdAt: string
+  updatedAt: string
+}
+
+// parsed from source.m3u (not persisted separately)
+interface PlaylistItemData {
+  key: string               // FR-M-4
+  number: string | null     // FR-M-5 → lcn
+  name: string
+  url: string
+  logo: string | null
+  group: string | null
+  attributes: Record<string, string>
+}
+
+// mappings.json  →  { version: 1, items: Record<key, MappingData> }
+interface MappingData {
+  status: 'mapped' | 'skipped'
+  guide?: {
+    site: string
+    site_id: string
+    lang: string | null
+    xmltv_id: string
+    name: string            // entry name from channels.xml, for display only
+    origin: 'upstream' | 'overlay' | 'manual'
+  }
+  stale?: boolean           // entry vanished after sync [FR-P-8]
+  updatedAt: string
+}
+
+// in-memory index entry
+interface GuideEntry {
+  site: string
+  site_id: string
+  lang: string | null
+  xmltv_id: string
+  name: string
+  logo: string | null
+  country: string | null    // derived from xmltv_id suffix
+  origin: 'upstream' | 'overlay'
+}
+```
+
+"Unmapped" and "Suggested" are not persisted: a channel without a mapping is unmapped; suggestions are computed on demand.
+
+Classes follow the iptv-org pattern of thin model classes with `toObject()` / `toJSON()` and use `Collection` / `Dictionary` from `@freearhey/core`.
+
+## 4. Source tree
+
+Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src/commands`) with SvelteKit's `$lib/server` for server-only code.
+
+```
+.
+├── CLAUDE.md
+├── Dockerfile
+├── docker-entrypoint.sh          # ensures /data dirs, then exec pm2-runtime
+├── pm2.config.cjs
+├── package.json  .npmrc (engine-strict=true)  .prettierrc  eslint.config.js
+├── svelte.config.js  vite.config.js  tsconfig.json
+├── docs/
+├── src/
+│   ├── app.html  app.css  app.d.ts  hooks.server.ts
+│   ├── commands/                 # tsx CLI entry points (commander), run by pm2/chronos/UI
+│   │   ├── run/all.ts            # lock → sync → grab lineups
+│   │   ├── run/sync.ts           # lock → sync only
+│   │   └── lineups/export.ts     # (dev aid) print channels.xml for a lineup
+│   ├── lib/
+│   │   ├── components/           # Svelte components, one folder each + index.ts barrel
+│   │   │   ├── Common/           # Button, Card, Badge, IconButton, Modal, SearchField, Checkbox,
+│   │   │   │                     # CopyToClipboard, CodeBlock (ported from iptv-org.github.io)
+│   │   │   ├── NavBar/
+│   │   │   ├── LineupCard/
+│   │   │   ├── ChannelTable/ ChannelRow/
+│   │   │   ├── MappingModal/     # Suggestions / Search / Manual tabs
+│   │   │   ├── RunLog/
+│   │   │   └── index.ts
+│   │   ├── icons/                # one Svelte SVG per icon, `size` prop (site convention)
+│   │   ├── actions/              # clickOutside, tippy
+│   │   ├── types/                # *.d.ts
+│   │   ├── darkMode.svelte.ts  modal.svelte.ts  constants.ts  utils.ts
+│   │   ├── core/                 # pure, isomorphic, fully unit-tested
+│   │   │   ├── playlistParser.ts     # M3U → PlaylistItem[] [5.2]
+│   │   │   ├── channelsXml.ts        # Mapping[] → channels.xml string [5.7]
+│   │   │   ├── matcher.ts            # features + scoring [5.4]
+│   │   │   └── escapeString.ts       # port of epg's escapeString
+│   │   ├── models/               # Lineup, PlaylistItem, Mapping, GuideEntry
+│   │   └── server/               # server-only (Node fs, child_process)
+│   │       ├── config.ts             # env parsing with defaults [§7]
+│   │       ├── storage.ts            # atomic JSON/text read/write under STORAGE_DIR
+│   │       ├── lineupStore.ts        # CRUD over /data/lineups
+│   │       ├── guideIndex.ts         # build/search index; reload on sync.json change
+│   │       ├── database.ts           # @iptv-org/sdk DataManager over /data/epg/temp/data
+│   │       ├── epgRepo.ts            # clone/fetch/reset/npm ci/api:load
+│   │       ├── overlay.ts            # link/unlink overlay sites, conflict handling
+│   │       ├── grabRunner.ts         # build args, spawn, capture log, atomic publish
+│   │       ├── lock.ts               # run.lock with pid + stale detection
+│   │       └── jobs.ts               # spawn detached commands from the web process
+│   └── routes/
+│       ├── +layout.svelte  +page.svelte  +page.server.ts
+│       ├── lineups/new/
+│       ├── lineups/[slug]/{+page,settings,runs}/
+│       ├── status/
+│       ├── guides/[file]/+server.ts       # FR-R-5
+│       └── api/
+│           ├── lineups/[slug]/suggestions/+server.ts   # GET ?key=
+│           ├── lineups/[slug]/mappings/+server.ts      # PUT/DELETE single mapping
+│           ├── entries/+server.ts                      # GET ?q=&site=&country=&lang=
+│           ├── database/+server.ts                     # GET ?q= (xmltv_id autocomplete)
+│           └── jobs/+server.ts                         # POST sync|grab, GET status (poll)
+├── static/                        # favicon, icon.svg (own mark)
+└── tests/
+    ├── __data__/input/  __data__/expected/
+    ├── core/*.test.ts             # vitest
+    └── server/*.test.ts
+```
+
+Writes from forms use SvelteKit **form actions** (progressive enhancement); interactive per-channel operations (suggestions, map/skip) use small JSON endpoints under `/api`.
+
+## 5. Key flows
+
+### 5.1 Create lineup / import M3U
+1. Form action receives name + file or URL → fetch (NFR-SEC-2 limits) → `playlistParser.parse()`.
+2. Reject if 0 items; collect warnings.
+3. `lineupStore.create()` writes `lineup.json`, `source.m3u`, empty `mappings.json`, empty `channels.xml`.
+4. Redirect to editor.
+
+Re-import: parse new playlist → diff by `key` against current → show diff page → on confirm, write `source.m3u`, drop mappings of removed keys, regenerate `channels.xml` [FR-M-6].
+
+### 5.2 Map a channel
+1. Editor loads lineup + items + mappings (+page.server.ts).
+2. Opening a row → `GET /api/lineups/<slug>/suggestions?key=…` → `matcher.suggest(item, guideIndex, lineup.filters)`.
+3. Confirm → `PUT /api/lineups/<slug>/mappings` `{ key, status, guide }` → validate (FR-E-2) → write `mappings.json` → regenerate `channels.xml` → return updated row.
+
+### 5.3 Sync [5.8]
+1. Remove overlay links, restore shadowed upstream folders.
+2. `git fetch --depth 1 origin <branch|ref>` → `git reset --hard FETCH_HEAD` → `git clean -fd sites` (only `sites/`; never touch `node_modules`/`temp`).
+3. If sha256(`package-lock.json`) ≠ stored → `npm ci --ignore-scripts`.
+4. `npm run api:load` (refresh database JSON into `temp/data`).
+5. Apply overlay: for each `/data/sites/<site>` → if `/data/epg/sites/<site>` exists, move it to `/data/.epg-sites-shadow/` → symlink.
+6. Write `status/sync.json` (sha, times, overlay report). On any failure in 2–4 keep previous checkout, record error.
+
+### 5.4 Grab [5.9]
+For each enabled lineup with ≥1 mapped channel:
+```
+spawn('npm', ['run', 'grab', '---',
+  '--channels', <abs channels.xml>,
+  '--output',   <tmp>/<slug>.xml,
+  ...overrides, ...(gzip ? ['--gzip'] : [])],
+  { cwd: '/data/epg', env: sanitizedEnv })
+```
+Pipe stdout/stderr to the run log; parse `[i/total]` lines for progress; on exit 0 and non-empty output → `rename` into `/data/guides/`. Record run in `status/runs/<slug>.json`.
+
+## 6. Reuse from upstream (do not reinvent)
+
+| Need | Use |
+| --- | --- |
+| Parse `*.channels.xml` | `EPGGrabber.parseChannelsXML` (`epg-grabber`, same version range as epg) |
+| iptv-org database (channels, feeds, alt names) | `@iptv-org/sdk` `DataManager({ dataDir }).loadFromDisk()` pointed at `/data/epg/temp/data` (epg's `api:load` already downloads it) |
+| Search index | `sdk.SearchEngine.createIndex` / `@freearhey/search-js` as epg's `searchChannels` does |
+| Collections, logging | `@freearhey/core` (`Collection`, `Dictionary`, `Logger`) |
+| CLI parsing | `commander` |
+| Cron | `@freearhey/chronos` (as epg's `pm2.config.js`) |
+| Process manager | `pm2` / `pm2-runtime` |
+| XML escaping | port of epg's `escapeString` (keep identical behaviour, with test) |
+| UI components | port from iptv-org.github.io `src/lib/components/Common` + icons (public domain / Unlicense) |
+| Toasts | `@zerodevx/svelte-toast` with the site's options |
+| Natural sort | `natural-orderby` (used by the site) |
+
+The interactive CLI `scripts/commands/channels/edit.ts` in iptv-org/epg is the closest existing equivalent of this app's mapping flow (search → pick channel → pick feed); the UI should follow the same two-step channel → feed concept for manual `xmltv_id` selection.
+
+## 7. Docker
+
+```dockerfile
+FROM node:22-alpine
+RUN apk add --no-cache git tzdata bash tini
+WORKDIR /app
+COPY package*.json .npmrc ./
+RUN npm ci
+COPY . .
+RUN npm run build && npm prune --omit=dev
+ENV NODE_ENV=production PORT=3000 STORAGE_DIR=/data BODY_SIZE_LIMIT=5M \
+    EPG_REPO=https://github.com/iptv-org/epg.git EPG_BRANCH=master \
+    CRON_SCHEDULE="0 0 * * *" RUN_AT_STARTUP=true
+RUN mkdir -p /data && chown node:node /data
+USER node
+VOLUME /data
+EXPOSE 3000
+ENTRYPOINT ["/sbin/tini", "--", "./docker-entrypoint.sh"]
+CMD ["pm2-runtime", "pm2.config.cjs"]
+```
+
+Runtime dependencies needed in the final image (keep in `dependencies`, not `devDependencies`): `pm2`, `@freearhey/chronos`, `tsx`, `commander`, `@freearhey/core`, `epg-grabber`, `@iptv-org/sdk`. The first clone/install happens in a pm2 `init` app (always registered, `autorestart: false`, runs `npm run run:sync` only when `/data/epg` is missing), not in the entrypoint, so the web UI is reachable immediately and shows "initialising" [NFR-DEP-3]. The web process treats a missing `/data/epg` or `status/sync.json` as "not ready". When `RUN_AT_STARTUP=true` the `startup` app runs `run:all` instead (which syncs anyway); the lock serialises them.
+
+## 8. Testing strategy
+
+- **Unit (vitest):** `core/*` pure functions with fixtures in `tests/__data__/input` → `expected` (iptv-org convention). Matcher tests assert top-N for a fixture OTA lineup against fixture `channels.xml` files.
+- **Server:** `lineupStore`, `overlay`, `lock`, `grabRunner` arg building — using a temp `STORAGE_DIR`.
+- **Integration (opt-in, `npm run test:integration`):** clone epg at a pinned ref into a temp dir, add a fixture overlay site whose config returns canned programs, run `run:all`, assert guide XML contains `<lcn>` and expected channel ids.
+- **Lint/type:** `npm run lint`, `npm run check` (svelte-check).
