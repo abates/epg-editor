@@ -192,7 +192,7 @@ Pages:
 | NFR-DEP-1 | Single Docker image based on `node:22-alpine` (same as iptv-org/epg), includes `git`. One exposed port (default `3000`). |
 | NFR-DEP-2 | All mutable state lives under one volume `/data` (lineups, guides, epg checkout, overlay, logs). Container is otherwise disposable. |
 | NFR-DEP-3 | First start (clone + install + API load) may take several minutes; UI must be reachable during it and show an "initialising" state. |
-| NFR-DEP-4 | Runs as non-root user; `/data` ownership documented (`PUID`/`PGID` not required in v1). |
+| NFR-DEP-4 | Runs as non-root user, `node` (1000:1000) by default or the ids in `PUID`/`PGID`; `/data` ownership documented. |
 | NFR-DEP-5 | Works on `linux/amd64` and `linux/arm64`. |
 | NFR-SEC-1 | No authentication. README states it is for trusted networks only and must not be exposed to the internet. |
 | NFR-SEC-2 | URL fetch (FR-M-2) limited to `http`/`https`, 10 s timeout, 5 MB max body. Upload limit 5 MB. |

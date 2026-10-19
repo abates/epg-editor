@@ -46,25 +46,32 @@ services:
       ORIGIN: http://nas.local:3000
       TZ: America/New_York
       CRON_SCHEDULE: 0 3 * * *
+      # Optional: run as the owner of ./data (default 1000)
+      # PUID: 1000
+      # PGID: 1000
 ```
 
 ### The data volume
 
 All state lives in `/data`: lineups, generated guides, the iptv-org/epg checkout, run logs and local sites. The container itself is disposable.
 
-The app runs as the image's `node` user (uid 1000, gid 1000). A named volume works as is. For a bind mount, the host directory must be writable by that user:
+The app runs as a non-root user with uid `PUID` and gid `PGID`, both `1000` by default (the image's `node` user). The container starts as root only to apply those ids, then drops to that user. A new named volume works as is. For a bind mount, set `PUID`/`PGID` to the owner of the host directory, or make it writable by the default user:
 
 ```sh
 mkdir -p data && sudo chown -R 1000:1000 data
 ```
 
-If it isn't, the container exits at start with a message saying so.
+The container never changes the ownership of `/data`. If it isn't writable by `PUID`:`PGID`, the container exits at start with a message saying so. This includes a named volume first created with other ids, so `chown` it when you change `PUID`/`PGID`.
+
+`docker run --user <uid>:<gid>` (`user:` in Compose) also works. The container then never runs as root, and `PUID`/`PGID` are ignored.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `ORIGIN` | — | Public URL of the app, for example `http://nas.local:3000`. Required for forms. |
+| `PUID` | `1000` | User id the app runs as. |
+| `PGID` | `1000` | Group id the app runs as. |
 | `PORT` | `3000` | HTTP port inside the container. |
 | `BODY_SIZE_LIMIT` | `5M` | Maximum request size (playlist uploads). |
 | `TZ` | `UTC` | Timezone for `CRON_SCHEDULE`. |

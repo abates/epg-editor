@@ -10,8 +10,8 @@ RUN npm run build && npm prune --omit=dev
 
 FROM node:22-alpine
 # git clones iptv-org/epg at runtime; tzdata makes TZ work for cron and display; tini reaps the
-# detached "Grab now" / "Sync now" runs
-RUN apk add --no-cache git tzdata tini \
+# detached "Grab now" / "Sync now" runs; su-exec drops root to PUID/PGID in the entrypoint
+RUN apk add --no-cache git tzdata tini su-exec \
   && npm config set --global update-notifier false
 WORKDIR /app
 # The commands (run:all, run:sync) run from source with tsx, so src/ and the tsconfig chain
@@ -34,9 +34,9 @@ ENV NODE_ENV=production \
     RUN_AT_STARTUP=true \
     TZ=UTC
 
-# NFR-DEP-4: runs as the image's "node" user (uid/gid 1000), which owns /data
+# NFR-DEP-4: starts as root so the entrypoint can remap the "node" user to PUID/PGID (default
+# 1000), then runs everything as "node". A new named volume is seeded with this ownership.
 RUN mkdir -p /data && chown node:node /data
-USER node
 VOLUME /data
 EXPOSE 3000
 
