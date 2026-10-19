@@ -1,4 +1,4 @@
-import type { LineupGrabData } from '$lib/types/lineup'
+import type { LineupData, LineupGrabData } from '$lib/types/lineup'
 import type { RunData } from '$lib/types/run'
 import { RunHistory, LOGS_DIR } from './runHistory'
 import { RunLog, type RunLogger } from './runLog'
@@ -74,11 +74,24 @@ export async function runGrab(
   const history = new RunHistory(storage)
   const startedAt = new Date()
 
-  const lineup = await store.get(slug)
-  if (!lineup) throw new Error(`lineup "${slug}" not found`)
+  if (!(await store.exists(slug))) throw new Error(`lineup "${slug}" not found`)
 
-  const channelsXml = await store.writeChannelsXml(slug)
-  const mapped = EPGGrabber.parseChannelsXML(channelsXml).length
+  // A lineup whose files can't be read is a failed run, not an error of the whole run:all
+  let lineup: LineupData
+  let mapped: number
+  try {
+    const found = await store.get(slug)
+    if (!found) throw new Error(`lineup "${slug}" was removed`)
+    lineup = found
+    const channelsXml = await store.writeChannelsXml(slug)
+    mapped = EPGGrabber.parseChannelsXML(channelsXml).length
+  } catch (error) {
+    logger?.error(`${slug}: ${message(error)}`)
+    const run = finish(startedAt, 'failed', { error: message(error), log: null })
+    await history.add(slug, run)
+    return run
+  }
+
   if (!mapped) {
     logger?.info(`${slug}: no mapped channels, skipped`)
     const run = finish(startedAt, 'skipped', { error: 'no mapped channels', log: null })
@@ -146,7 +159,7 @@ async function publish(storage: Storage, slug: string, tmpDir: string, gzip: boo
   await fs.rename(path.join(tmpDir, `${slug}.xml`), xml)
 }
 
-function finish(
+export function finish(
   startedAt: Date,
   result: RunData['result'],
   fields: Partial<Pick<RunData, 'channels' | 'programs' | 'error' | 'log'>>

@@ -4,7 +4,7 @@ import { clearCurrentRun, writeCurrentRun } from './runHistory'
 import { LineupStore } from './lineupStore'
 import type { RunLogger } from './runLog'
 import type { Config } from './config'
-import { runGrab } from './grabRunner'
+import { finish, runGrab } from './grabRunner'
 import { Storage } from './storage'
 import { runSync } from './sync'
 
@@ -46,8 +46,11 @@ export async function runAll({
       try {
         runs[slug] = await runGrab(slug, { config, logger, npm })
       } catch (error) {
-        // A lineup that can't be read must not stop the others [NFR-REL-1]
-        logger?.error(`${slug}: ${(error as Error).message}`)
+        // A lineup that can't be read must not stop the others [NFR-REL-1], but it still
+        // counts as failed, so run:all exits non-zero
+        const message = error instanceof Error ? error.message : String(error)
+        logger?.error(`${slug}: ${message}`)
+        runs[slug] = finish(new Date(), 'failed', { error: message, log: null })
       }
     }
 

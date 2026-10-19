@@ -94,6 +94,20 @@ describe('runAll', () => {
     expect((await history.list('ota')).length).toBe(2)
   })
 
+  it('records a lineup that cannot be read as failed and grabs the others', async () => {
+    await store.create({ name: 'bad', slug: 'bad', source: { type: 'upload' }, m3u })
+    await fs.rm(storage.path('lineups/bad/source.m3u'))
+
+    const { runs } = await runAll({ config, npm })
+
+    expect(runs.ota.result).toBe('success')
+    expect(runs.bad.result).toBe('failed')
+    expect(runs.bad.log).toBeNull()
+    const [run] = await history.list('bad')
+    expect(run.result).toBe('failed')
+    expect(run.error).toMatch(/source\.m3u/)
+  })
+
   it('throws for an unknown lineup before doing anything', async () => {
     await expect(runAll({ config, npm, lineup: 'nope' })).rejects.toThrow('not found')
     expect(await storage.exists('status/sync.json')).toBe(false)
