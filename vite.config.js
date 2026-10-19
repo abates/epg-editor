@@ -9,5 +9,8 @@ export default defineConfig({
     // Opt-in, needs network: npm run test:integration
     exclude: [...configDefaults.exclude, 'tests/integration/**'],
     passWithNoTests: true
+  },
+  server: {
+    host: '0.0.0.0'
   }
 })
