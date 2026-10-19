@@ -2,7 +2,9 @@ import type { MappingData, MappingGuideData, MappingRequestData } from '$lib/typ
 import type { ChannelCountsData, ChannelRowData } from '$lib/types/channel'
 import type { SuggestionData } from '$lib/types/suggestion'
 import type { PlaylistItemData } from '$lib/types/playlist'
+import type { SyncStatusData } from '$lib/types/sync'
 import type { LineupData } from '$lib/types/lineup'
+import type { RunData } from '$lib/types/run'
 import { validateGuideEntry, type GuideEntryField } from '$lib/core/mappingValidation'
 import { buildChannelRows, countChannels } from '$lib/core/channelRows'
 import { Matcher, lineupCallSigns } from '$lib/core/matcher'
@@ -10,9 +12,11 @@ import { parsePlaylist } from '$lib/core/playlistParser'
 import { GuideIndex, GuideIndexCache } from './guideIndex'
 import { config as defaultConfig, type Config } from './config'
 import { LineupStore, type LineupLoadError } from './lineupStore'
-import { SYNC_STATUS_FILE } from './sync'
+import { SYNC_STATUS_FILE, readSyncStatus } from './sync'
+import { RunHistory } from './runHistory'
 import { Database } from './database'
 import { Storage } from './storage'
+import { Jobs } from './jobs'
 import { error } from '@sveltejs/kit'
 import path from 'node:path'
 
@@ -21,6 +25,7 @@ import path from 'node:path'
 export interface LineupSummaryData {
   lineup: LineupData
   counts: ChannelCountsData
+  lastRun: RunData | null
 }
 
 export interface LineupViewData {
@@ -37,12 +42,18 @@ export type SaveMappingResult =
 export class Services {
   readonly lineups: LineupStore
   readonly guideIndex: GuideIndexCache
+  readonly runs: RunHistory
+  readonly jobs: Jobs
+  private readonly storage: Storage
   private readonly dataDir: string
   private readonly matchers = new WeakMap<GuideIndex, Matcher>()
   private readonly databases = new WeakMap<GuideIndex, Promise<Database | null>>()
 
   constructor(config: Pick<Config, 'storageDir' | 'epgDir'>) {
-    this.lineups = new LineupStore(new Storage(config.storageDir))
+    this.storage = new Storage(config.storageDir)
+    this.lineups = new LineupStore(this.storage)
+    this.runs = new RunHistory(this.storage)
+    this.jobs = new Jobs({ storageDir: config.storageDir })
     this.guideIndex = new GuideIndexCache({
       sitesDir: path.join(config.epgDir, 'sites'),
       statusFile: path.join(config.storageDir, SYNC_STATUS_FILE)
@@ -96,13 +107,19 @@ export class Services {
     const summaries: LineupSummaryData[] = []
     for (const lineup of lineups) {
       try {
-        summaries.push({ lineup, counts: (await this.viewLineup(lineup.slug)).counts })
+        const { counts } = await this.viewLineup(lineup.slug)
+        summaries.push({ lineup, counts, lastRun: await this.runs.last(lineup.slug) })
       } catch (error) {
         errors.push({ slug: lineup.slug, message: (error as Error).message })
       }
     }
 
     return { lineups: summaries, errors }
+  }
+
+  // Null until the first sync has finished; a broken file reads as missing
+  async syncStatus(): Promise<SyncStatusData | null> {
+    return readSyncStatus(this.storage).catch(() => null)
   }
 
   // Editor rows [FR-P-1]

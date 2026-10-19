@@ -51,10 +51,11 @@ The structure deliberately mirrors iptv-org/epg's own container (`pm2.config.js`
 │   └── <slug>.xml.gz
 ├── status/
 │   ├── sync.json                 # last sync result, SHA, lockfile hash, overlay report
+│   ├── current.json              # step/lineup of the run holding run.lock (removed when it ends)
 │   └── runs/<slug>.json          # last 20 runs
 ├── logs/
 │   ├── sync-<ts>.log
-│   └── grab-<slug>-<ts>.log      # rotated, keep last 20 per lineup
+│   └── grab-<slug>-<ts>.log      # kept while its run is in runs/<slug>.json (last 20)
 ├── .epg-sites-shadow/            # upstream site folders moved aside by overlay conflicts [FR-O-3]
 └── run.lock
 ```
@@ -143,12 +144,13 @@ Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src
 │   │   │   ├── LineupCard/
 │   │   │   ├── ChannelTable/ ChannelRow/
 │   │   │   ├── MappingModal/     # Suggestions / Search / Manual tabs
-│   │   │   ├── RunLog/
+│   │   │   ├── RunLog/  RunResultBadge/  JobButton/
 │   │   │   └── index.ts
 │   │   ├── icons/                # one Svelte SVG per icon, `size` prop (site convention)
 │   │   ├── actions/              # clickOutside, tippy
 │   │   ├── types/                # *.d.ts
 │   │   ├── darkMode.svelte.ts  modal.svelte.ts  constants.ts  api.ts (browser /api client)
+│   │   ├── jobs.svelte.ts        # running sync/grab state, polls /api/jobs [FR-R-3]
 │   │   ├── core/                 # pure, isomorphic, fully unit-tested
 │   │   │   ├── playlistParser.ts     # M3U → PlaylistItem[] [5.2]
 │   │   │   ├── channelsXml.ts        # Mapping[] → channels.xml string [5.7]
@@ -160,6 +162,8 @@ Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src
 │   │   │   ├── playlistDiff.ts       # re-import diff: added / removed / renamed [FR-M-6]
 │   │   │   ├── mappingValidation.ts  # manual entry checks + mapping request shape [FR-E-2]
 │   │   │   ├── formValues.ts         # list / optional-integer form fields
+│   │   │   ├── guideFile.ts          # /guides file names, ETag, conditional requests [FR-R-5]
+│   │   │   ├── formatDuration.ts     # run durations for the UI
 │   │   │   └── escapeString.ts       # port of epg's escapeString
 │   │   ├── models/               # Lineup, PlaylistItem, Mapping, GuideEntry
 │   │   └── server/               # server-only (Node fs, child_process)
@@ -174,6 +178,8 @@ Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src
 │   │       ├── overlay.ts            # link/unlink overlay sites, conflict handling
 │   │       ├── sync.ts               # sync orchestration, shared by run:sync and run:all
 │   │       ├── grabRunner.ts         # build args, spawn, capture log, atomic publish
+│   │       ├── runAll.ts             # sync + grab enabled lineups, shared by run:all
+│   │       ├── runHistory.ts         # status/runs/<slug>.json, log tail, status/current.json
 │   │       ├── spawn.ts              # nano-spawn with argument arrays + sanitised env
 │   │       ├── runLog.ts             # per-run log file under /data/logs + tail + rotation
 │   │       ├── lock.ts               # run.lock via proper-lockfile (mtime-based stale detection)
@@ -239,7 +245,14 @@ spawn('npm', ['run', 'grab', '---',
   { cwd: '/data/epg', env: sanitizedEnv({ NODE_PRESERVE_SYMLINKS: '1' }) })
 ```
 `NODE_PRESERVE_SYMLINKS=1` is required: without it, symlinked overlay configs resolve `require()` from `/data/sites` and can't find epg's `node_modules` ([spikes/M2-overlay-symlinks.md](spikes/M2-overlay-symlinks.md)).
-Pipe stdout/stderr to the run log; parse `[i/total]` lines for progress; on exit 0 and non-empty output → `rename` into `/data/guides/`. Record run in `status/runs/<slug>.json`.
+The temp output dir is `/data/guides/.tmp-<slug>-<uuid>/`, on the same filesystem, so publishing is a `rename`. Pipe stdout/stderr to the run log; on exit 0 with at least one `<channel>` and one `<programme>` → `rename` `.xml.gz` then `.xml` into `/data/guides/` (an old `.xml.gz` is removed when gzip is off). epg exits 0 even when every request failed, so an empty guide counts as a failed run and the last good guide stays. Record the run in `status/runs/<slug>.json`; dropping a run past the 20th deletes its log. Live `[i/total]` progress is FR-R-7 (M7).
+
+A lineup with no mapped channels is recorded as `skipped`. `run:all --lineup=<slug>` ("Grab now") grabs that lineup even when scheduled grabs are off for it.
+
+### 5.5 Jobs and scheduling
+- `pm2.config.cjs` runs every app in fork mode. The `scheduler` app runs `@freearhey/chronos` with `npm run run:all`. Like epg's own setup, chronos sends SIGINT to a run that is still going when the next tick fires, so `CRON_SCHEDULE` must leave room for a full run.
+- "Grab now" / "Sync now" → `POST /api/jobs` → `jobs.ts` spawns `npm run run:all -- --lineup=<slug>` / `npm run run:sync` detached, then waits until the command holds `run.lock` (or has exited) before answering. A 409 means another run holds the lock. The `web` app has `treekill: false` so these runs survive a web restart.
+- While the lock is held, the command keeps `status/current.json` up to date (`sync` or `grab` + lineup). `GET /api/jobs` returns `{ running, current }`; the UI polls it and reloads its data when the run ends.
 
 ## 6. Reuse from upstream (do not reinvent)
 
@@ -291,5 +304,5 @@ Runtime dependencies needed in the final image (keep in `dependencies`, not `dev
 
 - **Unit (vitest):** `core/*` pure functions with fixtures in `tests/__data__/input` → `expected` (iptv-org convention). Matcher tests assert top-N for a fixture OTA lineup against fixture `channels.xml` files.
 - **Server:** `lineupStore`, `overlay`, `lock`, `grabRunner` arg building — using a temp `STORAGE_DIR`.
-- **Integration (opt-in, `npm run test:integration`):** clone epg at a pinned ref into a temp dir, add a fixture overlay site whose config returns canned programs, run `run:all`, assert guide XML contains `<lcn>` and expected channel ids.
+- **Integration (opt-in, `npm run test:integration`, own `vitest.integration.config.js`):** clone epg at a pinned ref (`INTEGRATION_EPG_REF`, default the M1 spike commit; `INTEGRATION_EPG_REPO` can point at a local clone) into a temp dir, add an overlay site whose config fetches canned programs from a local HTTP server (and `require`s `dayjs` through the symlink), run `run:all`, assert guide XML contains `<lcn>` and expected channel ids.
 - **Lint/type:** `npm run lint`, `npm run check` (svelte-check).

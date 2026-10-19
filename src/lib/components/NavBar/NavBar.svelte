@@ -28,7 +28,11 @@
       <NavBar.Logo />
     </a>
 
-    <div class="inline-flex sm:space-x-1">
+    <div class="inline-flex items-center sm:space-x-1">
+      <a
+        href={resolve('/status')}
+        class="px-2 text-sm hover:text-gray-900 dark:hover:text-white hover:underline">Status</a
+      >
       <IconButton
         onClick={() => darkMode.toggle()}
         title="Toggle Dark Mode"

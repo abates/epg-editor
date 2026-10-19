@@ -32,6 +32,7 @@ npm run check        # svelte-check / type check
 npm run lint         # eslint
 npm run format       # prettier --write
 npm test             # vitest run
+npm run test:integration  # opt-in: real epg clone + grab against a mock overlay site (network)
 npm run run:sync     # tsx src/commands/run/sync.ts: clone/pull epg, install, link overlay
 npm run run:all      # tsx src/commands/run/all.ts: sync + grab all enabled lineups
 ```

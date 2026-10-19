@@ -4,6 +4,7 @@ import type { GuideEntryData } from '$lib/types/guide'
 import type { GuideEntryField } from '$lib/core/mappingValidation'
 import type { MappingRequestData } from '$lib/types/mapping'
 import type { SuggestionData } from '$lib/types/suggestion'
+import type { JobKind, JobStatusData } from '$lib/types/run'
 
 // Browser-side calls to the /api endpoints. Failures throw with the server's message
 export class ApiError extends Error {
@@ -66,6 +67,19 @@ export async function clearMapping(slug: string, key: string): Promise<MappingRe
   const params = new URLSearchParams({ key })
 
   return request(`/api/lineups/${slug}/mappings?${params}`, { method: 'DELETE' })
+}
+
+export async function getJobStatus(): Promise<JobStatusData> {
+  return request('/api/jobs')
+}
+
+// Throws an ApiError with status 409 while another sync or grab runs
+export async function startJob(kind: JobKind, lineup?: string): Promise<JobStatusData> {
+  return request('/api/jobs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ kind, lineup })
+  })
 }
 
 async function request(url: string, init?: RequestInit) {

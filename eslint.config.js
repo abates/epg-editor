@@ -42,6 +42,13 @@ export default defineConfig([
   },
 
   {
+    // pm2 loads its config with require()
+    files: ['**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' }
+  },
+
+  {
     ignores: [
       'tests/__data__/**',
       '.svelte-kit/**',

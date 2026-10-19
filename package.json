@@ -15,6 +15,7 @@
     "lint": "eslint",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.js",
     "run:all": "tsx src/commands/run/all.ts",
     "run:sync": "tsx src/commands/run/sync.ts"
   },
@@ -43,6 +44,7 @@
     "vitest": "^5.0.5"
   },
   "dependencies": {
+    "@freearhey/chronos": "^0.0.1",
     "@freearhey/core": "^0.16.1",
     "@iptv-org/sdk": "^1.5.0",
     "@iptv/playlist": "^1.2.1",
@@ -50,6 +52,7 @@
     "epg-grabber": "^0.48.0",
     "minisearch": "^7.2.0",
     "nano-spawn": "^2.1.0",
+    "pm2": "^7.0.4",
     "proper-lockfile": "^4.1.2",
     "slugify": "^1.6.9",
     "tsx": "^4.23.15",

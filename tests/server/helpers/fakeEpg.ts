@@ -47,8 +47,24 @@ export async function commit(
   return git(dir, ['rev-parse', 'HEAD'])
 }
 
+export const STUB_GUIDE = [
+  '<?xml version="1.0" encoding="UTF-8" ?><tv date="20260101">',
+  '<channel id="Example.us"><display-name>WCBS-HD</display-name><lcn>2.1</lcn></channel>',
+  '<programme start="20260101000000 +0000" stop="20260101010000 +0000" channel="Example.us"><title>One</title></programme>',
+  '<programme start="20260101010000 +0000" stop="20260101020000 +0000" channel="Example.us"><title>Two</title></programme>',
+  '</tv>'
+].join('\n')
+
+const STUB_GUIDE_EMPTY = [
+  '<?xml version="1.0" encoding="UTF-8" ?><tv date="20260101">',
+  '<channel id="Example.us"><display-name>WCBS-HD</display-name><lcn>2.1</lcn></channel>',
+  '</tv>'
+].join('\n')
+
 // Stand-in for npm: logs its arguments to npm-calls.log in the checkout, creates node_modules
-// for `ci` and temp/data for `run api:load`, and fails when the checkout has an npm-fail file
+// for `ci` and temp/data for `run api:load`, and fails when the checkout has an npm-fail file.
+// `run grab` writes STUB_GUIDE to --output (and .gz with --gzip); a grab-fail file makes it
+// fail and a grab-empty file makes it write a guide without programmes
 export async function createStubNpm(dir: string): Promise<string> {
   const filepath = path.join(dir, 'npm')
   await fs.mkdir(dir, { recursive: true })
@@ -56,10 +72,22 @@ export async function createStubNpm(dir: string): Promise<string> {
     filepath,
     [
       '#!/bin/sh',
+      `GUIDE='${STUB_GUIDE}'`,
+      `GUIDE_EMPTY='${STUB_GUIDE_EMPTY}'`,
       'echo "$*" >> npm-calls.log',
       'if [ -e npm-fail ]; then echo "stub npm failed" >&2; exit 1; fi',
       'if [ "$1" = "ci" ]; then mkdir -p node_modules; fi',
       'if [ "$1 $2" = "run api:load" ]; then mkdir -p temp/data; fi',
+      'if [ "$1 $2" = "run grab" ]; then',
+      '  for arg in "$@"; do',
+      '    case "$arg" in --output=*) out="${arg#--output=}" ;; --gzip) gz=1 ;; esac',
+      '  done',
+      '  echo "  [1/1] example.com (en) - Example.us - Jan 1, 2026 (2 programs)"',
+      '  if [ -e grab-fail ]; then echo "stub grab failed" >&2; exit 1; fi',
+      '  if [ -e grab-empty ]; then printf "%s" "$GUIDE_EMPTY" > "$out"; else printf "%s" "$GUIDE" > "$out"; fi',
+      '  if [ -n "$gz" ]; then gzip -c "$out" > "$out.gz"; fi',
+      '  echo "NODE_PRESERVE_SYMLINKS=$NODE_PRESERVE_SYMLINKS STORAGE_DIR=$STORAGE_DIR" >> grab-env.log',
+      'fi',
       ''
     ].join('\n'),
     { mode: 0o755 }

@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { CopyToClipboard, IconButton, StatusBadge } from '$lib/components'
+  import { CopyToClipboard, IconButton, RunResultBadge, StatusBadge } from '$lib/components'
   import type { ChannelCountsData } from '$lib/types/channel'
   import type { LineupData } from '$lib/types/lineup'
+  import type { RunData } from '$lib/types/run'
   import { goto } from '$app/navigation'
   import { resolve } from '$app/paths'
   import { page } from '$app/state'
@@ -9,9 +10,10 @@
   interface Props {
     lineup: LineupData
     counts: ChannelCountsData
+    lastRun: RunData | null
   }
 
-  let { lineup, counts }: Props = $props()
+  let { lineup, counts, lastRun }: Props = $props()
 
   const guideUrl = $derived(`${page.url.origin}/guides/${lineup.slug}.xml`)
 </script>
@@ -49,9 +51,14 @@
     {/if}
   </div>
 
-  <div class="text-sm text-gray-500 dark:text-gray-400">
-    <!-- Run history arrives with grabbing (M5) -->
-    Last grab: never
+  <div class="flex flex-wrap items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+    <a href={resolve('/lineups/[slug]/runs', { slug: lineup.slug })} class="hover:underline">
+      Last grab:
+      {#if lastRun}{new Date(lastRun.startedAt).toLocaleString()}{:else}never{/if}
+    </a>
+    {#if lastRun}
+      <RunResultBadge result={lastRun.result} title={lastRun.error ?? undefined} />
+    {/if}
   </div>
 
   <div class="flex items-center gap-1 min-w-0">
