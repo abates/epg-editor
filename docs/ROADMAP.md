@@ -51,7 +51,7 @@ Each milestone ends in a working, tested, committed state. Requirement IDs refer
 ## M6 — Docker & docs
 
 - `Dockerfile`, `docker-entrypoint.sh`, `.dockerignore`; non-root; amd64 + arm64 build (NFR-DEP-*).
-- README: quick start (`docker run` / compose example), env table, Plex setup, overlay workflow (develop → mount → sync → map → contribute upstream), security note (NFR-SEC-1).
+- README: quick start (`docker run` / compose example), env table, how to use the guide URL (client-neutral, no per-client setup steps), overlay workflow (develop → mount → sync → map → contribute upstream), security note (NFR-SEC-1).
 - Walk through acceptance criteria §8 manually and record results.
 
 ## M7 — Polish (SHOULD/COULD items)

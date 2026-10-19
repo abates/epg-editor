@@ -124,7 +124,7 @@ Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src
 ```
 .
 ├── CLAUDE.md
-├── Dockerfile
+├── Dockerfile  .dockerignore  .github/workflows/{ci,release}.yml
 ├── docker-entrypoint.sh          # ensures /data dirs, then exec pm2-runtime
 ├── pm2.config.cjs
 ├── package.json  .npmrc (engine-strict=true)  .prettierrc  eslint.config.js
@@ -279,24 +279,7 @@ The interactive CLI `scripts/commands/channels/edit.ts` in iptv-org/epg is the c
 
 ## 7. Docker
 
-```dockerfile
-FROM node:22-alpine
-RUN apk add --no-cache git tzdata bash tini
-WORKDIR /app
-COPY package*.json .npmrc ./
-RUN npm ci
-COPY . .
-RUN npm run build && npm prune --omit=dev
-ENV NODE_ENV=production PORT=3000 STORAGE_DIR=/data BODY_SIZE_LIMIT=5M \
-    EPG_REPO=https://github.com/iptv-org/epg.git EPG_BRANCH=master \
-    CRON_SCHEDULE="0 0 * * *" RUN_AT_STARTUP=true
-RUN mkdir -p /data && chown node:node /data
-USER node
-VOLUME /data
-EXPOSE 3000
-ENTRYPOINT ["/sbin/tini", "--", "./docker-entrypoint.sh"]
-CMD ["pm2-runtime", "pm2.config.cjs"]
-```
+See [`Dockerfile`](../Dockerfile). Two stages on `node:22-alpine`: the build stage runs `npm ci`, `npm run build` and `npm prune --omit=dev`; the runtime stage adds `git`, `tzdata` and `tini` and copies `node_modules`, `build/`, `src/` and the tsconfig chain (`tsconfig.json` + `.svelte-kit/tsconfig.json`), because the commands run from source with `tsx`. It runs as `node` (uid 1000) with `/data` as a volume, a `wget` health check on `/`, and `tini` → `docker-entrypoint.sh` → `pm2-runtime pm2.config.cjs`. The entrypoint exits with a `chown` hint when `/data` isn't writable [NFR-DEP-4] and warns when `ORIGIN` is unset. CI builds `linux/amd64` and `linux/arm64` [NFR-DEP-5]; a `v<version>` tag matching `package.json` publishes both to `ghcr.io` as `<version>` and `latest` (`release.yml`).
 
 Runtime dependencies needed in the final image (keep in `dependencies`, not `devDependencies`): `pm2`, `@freearhey/chronos`, `tsx`, `commander`, `@freearhey/core`, `epg-grabber`, `@iptv-org/sdk`. The first clone/install happens in a pm2 `init` app (always registered, `autorestart: false`, runs `npm run run:sync` only when `/data/epg` is missing), not in the entrypoint, so the web UI is reachable immediately and shows "initialising" [NFR-DEP-3]. The web process treats a missing `/data/epg` or `status/sync.json` as "not ready". When `RUN_AT_STARTUP=true` the `startup` app runs `run:all` instead (which syncs anyway); the lock serialises them.
 

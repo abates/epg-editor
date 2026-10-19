@@ -1,0 +1,14 @@
+.git
+.devcontainer
+.svelte-kit
+build
+node_modules
+data
+dev-data
+tests
+docs
+.env
+.env.*
+*.log
+Dockerfile
+.dockerignore
