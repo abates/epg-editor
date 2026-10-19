@@ -236,11 +236,21 @@ export class LineupStore {
 
   // FR-P-6: one channel's mapping, or null to clear it; channels.xml is rewritten each time
   async setMapping(slug: string, key: string, mapping: MappingData | null): Promise<MappingsData> {
+    return this.setMappings(slug, { [key]: mapping })
+  }
+
+  // FR-P-7: several channels in one write, so channels.xml is rewritten once
+  async setMappings(
+    slug: string,
+    changes: Record<string, MappingData | null>
+  ): Promise<MappingsData> {
     return this.exclusive(slug, async () => {
       const mappings = await this.loadMappings(slug)
       const items = { ...mappings.items }
-      if (mapping) items[key] = mapping
-      else delete items[key]
+      for (const [key, mapping] of Object.entries(changes)) {
+        if (mapping) items[key] = mapping
+        else delete items[key]
+      }
 
       const updated: MappingsData = { ...mappings, items }
       await this.saveMappings(slug, updated)

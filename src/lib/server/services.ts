@@ -1,4 +1,9 @@
-import type { MappingData, MappingGuideData, MappingRequestData } from '$lib/types/mapping'
+import type {
+  BulkMappingRequestData,
+  MappingData,
+  MappingGuideData,
+  MappingRequestData
+} from '$lib/types/mapping'
 import type { ChannelCountsData, ChannelRowData } from '$lib/types/channel'
 import type { SuggestionData } from '$lib/types/suggestion'
 import type { PlaylistItemData } from '$lib/types/playlist'
@@ -172,16 +177,9 @@ export class Services {
     if (request.status === 'skipped') {
       mapping = { status: 'skipped', updatedAt }
     } else if ('entry' in request) {
-      const entry = (await this.readyIndex()).find(request.entry.site, request.entry.site_id)
-      if (!entry)
-        error(400, `Guide entry ${request.entry.site} / ${request.entry.site_id} not found`)
-      const { site, site_id, lang, xmltv_id, name, origin } = entry
-      mapping = {
-        status: 'mapped',
-        guide: { site, site_id, lang, xmltv_id, name, origin },
-        updatedAt
-      }
-      if (!xmltv_id)
+      const guide = indexGuide(await this.readyIndex(), request.entry)
+      mapping = { status: 'mapped', guide, updatedAt }
+      if (!guide.xmltv_id)
         warnings.push('Without an xmltv_id the guide uses the site ID as the channel id')
     } else {
       const index = await this.readyIndex()
@@ -205,6 +203,38 @@ export class Services {
     await this.lineups.setMapping(slug, item.key, mapping)
 
     return { ok: true, row: toRow(item, mapping), warnings }
+  }
+
+  // FR-P-7: accepts reviewed suggestions in one write. Nothing is saved when any channel or
+  // entry is unknown, e.g. after a sync since the page loaded
+  async acceptEntries(
+    slug: string,
+    request: BulkMappingRequestData
+  ): Promise<{ rows: ChannelRowData[]; warnings: string[] }> {
+    if (!(await this.lineups.get(slug))) error(404, `Lineup "${slug}" not found`)
+
+    const { items } = parsePlaylist(await this.lineups.loadSource(slug))
+    const byKey = new Map(items.map(item => [item.key, item]))
+    const index = await this.readyIndex()
+    const updatedAt = new Date().toISOString()
+
+    const changes: Record<string, MappingData> = {}
+    const rows: ChannelRowData[] = []
+    for (const { key, entry } of request.items) {
+      const item = byKey.get(key)
+      if (!item) error(404, `Channel "${key}" not found in lineup "${slug}"`)
+      const mapping: MappingData = { status: 'mapped', guide: indexGuide(index, entry), updatedAt }
+      changes[key] = mapping
+      rows.push(toRow(item, mapping))
+    }
+    await this.lineups.setMappings(slug, changes)
+
+    const withoutId = rows.filter(row => !row.mapping?.guide?.xmltv_id).length
+    const warnings = withoutId
+      ? [`${withoutId} of these entries have no xmltv_id, so the guide uses their site IDs`]
+      : []
+
+    return { rows, warnings }
   }
 
   async clearMapping(slug: string, key: string): Promise<ChannelRowData> {
@@ -235,6 +265,15 @@ export class Services {
   private async readyIndex(): Promise<GuideIndex> {
     return (await this.guideIndex.get()) ?? error(503, 'The guide index is not ready yet')
   }
+}
+
+// Entries picked from the index are copied from it, so a client can't save one that doesn't exist
+function indexGuide(index: GuideIndex, request: { site: string; site_id: string }) {
+  const entry = index.find(request.site, request.site_id)
+  if (!entry) error(400, `Guide entry ${request.site} / ${request.site_id} not found`)
+  const { site, site_id, lang, xmltv_id, name, origin } = entry
+
+  return { site, site_id, lang, xmltv_id, name, origin } satisfies MappingGuideData
 }
 
 function toRow(item: PlaylistItemData, mapping: MappingData | null): ChannelRowData {

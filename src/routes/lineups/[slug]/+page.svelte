@@ -1,5 +1,12 @@
 <script lang="ts">
-  import { Alert, ChannelsXmlModal, ChannelTable, MappingModal, SearchField } from '$lib/components'
+  import {
+    Alert,
+    BulkAcceptModal,
+    ChannelsXmlModal,
+    ChannelTable,
+    MappingModal,
+    SearchField
+  } from '$lib/components'
   import type { ChannelRowData } from '$lib/types/channel'
   import type { SuggestionData } from '$lib/types/suggestion'
   import { MODAL_KEY, type ModalContext } from '$lib/modal.svelte'
@@ -67,6 +74,27 @@
     })
   })
 
+  // FR-P-7: the suggested channels in the current filter and search
+  const acceptable = $derived(
+    visible.flatMap(row => {
+      const suggestion = row.status === 'unmapped' ? suggestions?.[row.key] : undefined
+      return suggestion ? [{ row, suggestion }] : []
+    })
+  )
+
+  function replaceRows(updated: ChannelRowData[]) {
+    const byKey = new Map(updated.map(row => [row.key, row]))
+    rows = rows.map(current => byKey.get(current.key) ?? current)
+  }
+
+  function openBulkAccept() {
+    modal.open(BulkAcceptModal, {
+      slug: data.lineup.slug,
+      candidates: acceptable,
+      onSaved: replaceRows
+    })
+  }
+
   // A cleared channel had no suggestion computed at page load
   async function loadSuggestion(key: string) {
     if (!suggestions || suggestions[key]) return
@@ -81,7 +109,7 @@
       filters: data.lineup.filters,
       sites: data.sites,
       onSaved: (updated: ChannelRowData) => {
-        rows = rows.map(current => (current.key === updated.key ? updated : current))
+        replaceRows([updated])
         if (updated.status === 'unmapped') loadSuggestion(updated.key)
       }
     })
@@ -159,7 +187,23 @@
           </button>
         {/each}
       </div>
-      <SearchField bind:value={query} placeholder="Search channels" version="mini" />
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="flex-1 min-w-48">
+          <SearchField bind:value={query} placeholder="Search channels" version="mini" />
+        </div>
+        <button
+          type="button"
+          class="btn-secondary h-8 px-3"
+          disabled={!acceptable.length}
+          title={suggestions
+            ? 'Review and accept the top suggestion for the channels listed below'
+            : 'Suggestions are still loading'}
+          onclick={openBulkAccept}
+        >
+          <Icon.Check size={16} /> Accept suggestions
+          {#if acceptable.length}<span class="font-medium">{acceptable.length}</span>{/if}
+        </button>
+      </div>
     </div>
 
     {#if visible.length}

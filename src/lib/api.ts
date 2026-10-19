@@ -2,7 +2,7 @@ import type { ChannelRowData } from '$lib/types/channel'
 import type { DatabaseChannelData } from '$lib/types/database'
 import type { GuideEntryData } from '$lib/types/guide'
 import type { GuideEntryField } from '$lib/core/mappingValidation'
-import type { MappingRequestData } from '$lib/types/mapping'
+import type { BulkMappingRequestData, MappingRequestData } from '$lib/types/mapping'
 import type { SuggestionData } from '$lib/types/suggestion'
 import type { JobKind, JobStatusData } from '$lib/types/run'
 
@@ -61,6 +61,18 @@ export async function saveMapping(
   if (response.status === 422) return { ok: false, ...(await response.json()) }
 
   return { ok: true, ...(await parse(response)) }
+}
+
+// FR-P-7: all or nothing; throws when a channel or entry is no longer known
+export async function acceptEntries(
+  slug: string,
+  body: BulkMappingRequestData
+): Promise<{ rows: ChannelRowData[]; warnings: string[] }> {
+  return request(`/api/lineups/${slug}/mappings/bulk`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  })
 }
 
 export async function clearMapping(slug: string, key: string): Promise<MappingResponse> {

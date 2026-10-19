@@ -148,6 +148,23 @@ describe('LineupStore', () => {
     expect(await store.loadChannelsXml('living-room')).not.toContain('lcn="2.1"')
   })
 
+  it('sets and clears several mappings in one write [FR-P-7]', async () => {
+    await create()
+    await store.setMapping('living-room', '7.1', mappings.items['7.1'])
+
+    const updated = await store.setMappings('living-room', {
+      '2.1': mappings.items['2.1'],
+      '2.2': mappings.items['2.2'],
+      '7.1': null
+    })
+
+    expect(Object.keys(updated.items).sort()).toEqual(['2.1', '2.2'])
+    expect(await store.loadMappings('living-room')).toEqual(updated)
+    const xml = await store.loadChannelsXml('living-room')
+    expect(xml).toContain('lcn="2.1">WCBS-HD</channel>')
+    expect(xml).not.toContain('lcn="7.1"')
+  })
+
   it('keeps a failed write from blocking the next one', async () => {
     await create()
     await expect(store.update('living-room', { name: ' ' })).rejects.toThrow('name is required')

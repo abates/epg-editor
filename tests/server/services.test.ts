@@ -176,6 +176,31 @@ describe('Services', () => {
     })
   })
 
+  it('accepts several suggestions in one write, or none when one is unknown [FR-P-7]', async () => {
+    await finishSync()
+    const wcbs = { key: '2.1', entry: { site: 'tvtv.us', site_id: '16689' } }
+    const second = { key: '2.2', entry: { site: 'tvtv.us', site_id: '74916' } }
+
+    await expect(
+      services.acceptEntries('living-room', {
+        items: [wcbs, { ...second, entry: { site: 'tvtv.us', site_id: 'nope' } }]
+      })
+    ).rejects.toMatchObject({ status: 400 })
+    await expect(
+      services.acceptEntries('living-room', { items: [wcbs, { ...second, key: '99.9' }] })
+    ).rejects.toMatchObject({ status: 404 })
+    expect((await services.lineups.loadMappings('living-room')).items).toEqual({})
+
+    const result = await services.acceptEntries('living-room', { items: [wcbs, second] })
+    expect(result.rows).toMatchObject([
+      { key: '2.1', status: 'mapped', mapping: { guide: { xmltv_id: 'WCBSTV21.us@HD' } } },
+      { key: '2.2', status: 'mapped', mapping: { guide: { site_id: '74916' } } }
+    ])
+    const xml = await services.lineups.loadChannelsXml('living-room')
+    expect(xml).toContain('site_id="16689"')
+    expect(xml).toContain('site_id="74916"')
+  })
+
   it('skips and clears channels', async () => {
     const skipped = await services.saveMapping('living-room', { key: '2.1', status: 'skipped' })
     expect(skipped).toMatchObject({ ok: true, row: { status: 'skipped' } })

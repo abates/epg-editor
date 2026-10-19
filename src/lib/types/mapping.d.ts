@@ -30,3 +30,8 @@ export type MappingRequestData =
       status: 'mapped'
       manual: { site: string; site_id: string; lang: string | null; xmltv_id: string }
     }
+
+// POST /api/lineups/<slug>/mappings/bulk: map several channels to index entries at once [FR-P-7]
+export interface BulkMappingRequestData {
+  items: { key: string; entry: { site: string; site_id: string } }[]
+}

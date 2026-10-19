@@ -1,4 +1,4 @@
-import type { MappingRequestData } from '$lib/types/mapping'
+import type { BulkMappingRequestData, MappingRequestData } from '$lib/types/mapping'
 import { XMLTV_ID_PATTERN } from './xmltvId'
 import { isValidSlug } from './slug'
 
@@ -69,13 +69,7 @@ export function parseMappingRequest(body: unknown): MappingRequestData {
   if (body.status === 'skipped') return { key, status: 'skipped' }
   if (body.status !== 'mapped') throw new Error('"status" must be "mapped" or "skipped"')
 
-  if (isObject(body.entry)) {
-    const { site, site_id } = body.entry
-    if (typeof site !== 'string' || typeof site_id !== 'string')
-      throw new Error('"entry" needs "site" and "site_id"')
-
-    return { key, status: 'mapped', entry: { site, site_id } }
-  }
+  if (isObject(body.entry)) return { key, status: 'mapped', entry: parseEntry(body.entry) }
 
   if (isObject(body.manual)) {
     const { site, site_id, lang, xmltv_id } = body.manual
@@ -91,6 +85,34 @@ export function parseMappingRequest(body: unknown): MappingRequestData {
   }
 
   throw new Error('A mapped channel needs "entry" or "manual"')
+}
+
+// Shape check of a POST /api/lineups/<slug>/mappings/bulk body [FR-P-7]
+export function parseBulkMappingRequest(body: unknown): BulkMappingRequestData {
+  if (!isObject(body) || !Array.isArray(body.items)) throw new Error('"items" must be an array')
+  if (!body.items.length) throw new Error('"items" is empty')
+
+  const keys = new Set<string>()
+  const items = body.items.map(item => {
+    if (!isObject(item)) throw new Error('Each item must be a JSON object')
+    const key = item.key
+    if (typeof key !== 'string' || !key) throw new Error('"key" is required')
+    if (keys.has(key)) throw new Error(`Channel "${key}" is listed twice`)
+    keys.add(key)
+    if (!isObject(item.entry)) throw new Error('Each item needs an "entry"')
+
+    return { key, entry: parseEntry(item.entry) }
+  })
+
+  return { items }
+}
+
+function parseEntry(entry: Record<string, unknown>): { site: string; site_id: string } {
+  const { site, site_id } = entry
+  if (typeof site !== 'string' || typeof site_id !== 'string')
+    throw new Error('"entry" needs "site" and "site_id"')
+
+  return { site, site_id }
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

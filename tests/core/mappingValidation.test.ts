@@ -1,4 +1,5 @@
 import {
+  parseBulkMappingRequest,
   parseMappingRequest,
   validateGuideEntry,
   type GuideEntryLookup
@@ -87,5 +88,28 @@ describe('parseMappingRequest', () => {
     expect(() =>
       parseMappingRequest({ key: '2.1', status: 'mapped', manual: { site: 'tvtv.us', lang: 1 } })
     ).toThrow('"manual" needs')
+  })
+})
+
+describe('parseBulkMappingRequest', () => {
+  it('accepts a list of channels and index entries', () => {
+    const item = { key: '2.1', entry: { site: 'tvtv.us', site_id: '16689', extra: true } }
+
+    expect(parseBulkMappingRequest({ items: [item] })).toEqual({
+      items: [{ key: '2.1', entry: { site: 'tvtv.us', site_id: '16689' } }]
+    })
+  })
+
+  it('rejects a missing or empty list, a bad item and a channel listed twice', () => {
+    const item = { key: '2.1', entry: { site: 'tvtv.us', site_id: '16689' } }
+
+    expect(() => parseBulkMappingRequest({})).toThrow('"items" must be an array')
+    expect(() => parseBulkMappingRequest({ items: [] })).toThrow('"items" is empty')
+    expect(() => parseBulkMappingRequest({ items: [{ ...item, key: '' }] })).toThrow('"key"')
+    expect(() => parseBulkMappingRequest({ items: [{ key: '2.1' }] })).toThrow('"entry"')
+    expect(() =>
+      parseBulkMappingRequest({ items: [{ key: '2.1', entry: { site: 'tvtv.us' } }] })
+    ).toThrow('"entry" needs "site" and "site_id"')
+    expect(() => parseBulkMappingRequest({ items: [item, item] })).toThrow('listed twice')
   })
 })
