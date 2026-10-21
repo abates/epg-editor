@@ -12,7 +12,7 @@ export class Database {
   readonly channels: sdk.Models.Channel[]
   readonly feeds: sdk.Models.Feed[]
   private readonly channelsById: Map<string, sdk.Models.Channel>
-  private readonly streamIds: Set<string>
+  private readonly feedsByStreamId: Map<string, sdk.Models.Feed>
   private readonly feedsByChannel: Map<string, sdk.Models.Feed[]>
   private search: MiniSearch<{
     id: number
@@ -25,7 +25,7 @@ export class Database {
     this.channels = channels
     this.feeds = feeds
     this.channelsById = new Map(channels.map(channel => [channel.id, channel]))
-    this.streamIds = new Set(feeds.map(feed => feed.getStreamId()))
+    this.feedsByStreamId = new Map(feeds.map(feed => [feed.getStreamId(), feed]))
     this.feedsByChannel = new Map()
     for (const feed of feeds) {
       const list = this.feedsByChannel.get(feed.channel)
@@ -49,7 +49,7 @@ export class Database {
     if (!parts) return false
     if (!parts.feed) return this.channelsById.has(parts.channel)
 
-    return this.streamIds.has(xmltvId)
+    return this.feedsByStreamId.has(xmltvId)
   }
 
   // Display name for a manual mapping; null when the channel is not in the database
@@ -57,6 +57,17 @@ export class Database {
     const parts = parseXmltvId(xmltvId)
 
     return (parts && this.channelsById.get(parts.channel)?.name) ?? null
+  }
+
+  // Same lookup as epg's grab (getLogoForChannel): the feed's first logo, then the channel's.
+  // Null when the database has none
+  logo(xmltvId: string): string | null {
+    const feedLogo = this.feedsByStreamId.get(xmltvId)?.getLogos().first()
+    if (feedLogo) return feedLogo.url
+
+    const [channelId] = xmltvId.split('@')
+
+    return this.channelsById.get(channelId)?.getLogos().first()?.url ?? null
   }
 
   // Channels by id, name or alternative name, each with its feeds [FR-E-1, FR-S-5]
