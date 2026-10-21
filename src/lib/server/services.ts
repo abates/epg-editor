@@ -56,7 +56,13 @@ export class Services {
 
   constructor(config: Pick<Config, 'storageDir' | 'epgDir'>) {
     this.storage = new Storage(config.storageDir)
-    this.lineups = new LineupStore(this.storage)
+    this.lineups = new LineupStore(this.storage, {
+      logos: async () => {
+        const database = await this.optionalDatabase()
+
+        return database ? xmltvId => database.logo(xmltvId) : null
+      }
+    })
     this.runs = new RunHistory(this.storage)
     this.jobs = new Jobs({ storageDir: config.storageDir })
     this.guideIndex = new GuideIndexCache({
@@ -180,7 +186,7 @@ export class Services {
       const guide = indexGuide(await this.readyIndex(), request.entry)
       mapping = { status: 'mapped', guide, updatedAt }
       if (!guide.xmltv_id)
-        warnings.push('Without an xmltv_id the guide uses the site ID as the channel id')
+        warnings.push('Without an xmltv_id the guide has no logo from the iptv-org database')
     } else {
       const index = await this.readyIndex()
       const database = await this.optionalDatabase()
@@ -231,7 +237,7 @@ export class Services {
 
     const withoutId = rows.filter(row => !row.mapping?.guide?.xmltv_id).length
     const warnings = withoutId
-      ? [`${withoutId} of these entries have no xmltv_id, so the guide uses their site IDs`]
+      ? [`${withoutId} of these entries have no xmltv_id, so they get no iptv-org logo`]
       : []
 
     return { rows, warnings }

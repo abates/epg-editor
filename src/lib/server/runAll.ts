@@ -5,8 +5,10 @@ import { LineupStore } from './lineupStore'
 import type { RunLogger } from './runLog'
 import type { Config } from './config'
 import { finish, runGrab } from './grabRunner'
+import { databaseLogos } from './database'
 import { Storage } from './storage'
 import { runSync } from './sync'
+import path from 'node:path'
 
 export interface RunAllOptions {
   config: Config
@@ -40,11 +42,13 @@ export async function runAll({
       logger?.warn(`sync failed, grabbing with the previous checkout: ${sync.error}`)
 
     const slugs = lineup ? [lineup] : await enabledLineups(store, logger)
+    // Loaded after the sync, so the grabs see the database it downloaded
+    const logos = databaseLogos(path.join(config.epgDir, 'temp', 'data'))
     const runs: Record<string, RunData> = {}
     for (const slug of slugs) {
       await writeCurrentRun(storage, { step: 'grab', lineup: slug })
       try {
-        runs[slug] = await runGrab(slug, { config, logger, npm })
+        runs[slug] = await runGrab(slug, { config, logger, npm, logos })
       } catch (error) {
         // A lineup that can't be read must not stop the others [NFR-REL-1], but it still
         // counts as failed, so run:all exits non-zero

@@ -123,7 +123,11 @@ export async function runSync({ config, logger, npm }: SyncOptions): Promise<Syn
       }
 
       log.info('refreshing lineups...')
-      await refreshLineups(new LineupStore(storage), index, log, warn)
+      const loaded = database
+      const store = new LineupStore(storage, {
+        logos: async () => loaded && (xmltvId => loaded.logo(xmltvId))
+      })
+      await refreshLineups(store, index, log, warn)
     } catch (refreshError) {
       error ??= message(refreshError)
       log.error(message(refreshError))

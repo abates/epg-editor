@@ -10,10 +10,10 @@ const m3u = await fs.readFile('tests/__data__/input/m3u/hdhomerun.m3u', 'utf8')
 const mappings: MappingsData = JSON.parse(
   await fs.readFile('tests/__data__/input/channelsXml/hdhomerun.mappings.json', 'utf8')
 )
-const expectedXml = await fs.readFile(
-  'tests/__data__/expected/channelsXml/hdhomerun.channels.xml',
-  'utf8'
-)
+// The fixture is written for the "ota" lineup; guide ids start with the lineup's slug
+const expectedXml = (
+  await fs.readFile('tests/__data__/expected/channelsXml/hdhomerun.channels.xml', 'utf8')
+).replaceAll('xmltv_id="ota.', 'xmltv_id="living-room.')
 const emptyXml = await fs.readFile('tests/__data__/expected/channelsXml/empty.channels.xml', 'utf8')
 
 let rootDir: string
@@ -117,6 +117,19 @@ describe('LineupStore', () => {
     expect(store.channelsXmlPath('living-room')).toBe(
       path.join(rootDir, 'lineups/living-room/channels.xml')
     )
+  })
+
+  it('writes logos from the resolver it was given', async () => {
+    store = new LineupStore(storage, {
+      logos: async () => xmltvId =>
+        xmltvId === 'WCBSTV.us@SD' ? 'https://example.com/wcbs.png' : null
+    })
+    await create()
+    await store.saveMappings('living-room', mappings)
+
+    const xml = await store.loadChannelsXml('living-room')
+    expect(xml).toContain('lcn="2.1" logo="https://example.com/wcbs.png">WCBS-HD</channel>')
+    expect(xml).toContain('lcn="4.1">WNBC-HD</channel>')
   })
 
   it('regenerates channels.xml when the source is replaced', async () => {

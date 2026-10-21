@@ -109,8 +109,13 @@ Each lineup's guide is a standard XMLTV file. Add its URL as an XMLTV source in 
 - `/guides/<lineup>.xml` is the plain guide, and `/guides/<lineup>.xml.gz` is the gzipped copy when `GRAB_GZIP` is on.
 - The client fetches the guide over HTTP, so it must be able to reach epg-editor.
 - Each channel carries its number from the playlist (for example `2.1`) as `<lcn>`, and the playlist's channel name as `<display-name>`. Clients use these to match guide channels to tuner channels.
+- Each channel's id is the lineup and the channel's number, for example `living-room.2.1`. It stays the same when you map the channel to a different guide entry, so clients that remember their own channel mapping keep it.
 - The URL returns 404 until the lineup's first successful grab. After that, a failed grab keeps the last good guide.
 - Clients refresh guides on their own schedule. After changing mappings, run a grab, then refresh the guide in your client.
+
+### Upgrading
+
+**From 0.0.2 or earlier:** guide channel ids used to come from the mapped guide entry (for example `WCBSTV.us@SD`). They now come from the lineup and the channel (for example `living-room.2.1`), so they no longer change when you re-map a channel. After upgrading, the first grab changes every channel's id once. Clients that store their own channel mapping (Plex, for example) need to re-map their channels to the guide one last time.
 
 ## Local sites
 

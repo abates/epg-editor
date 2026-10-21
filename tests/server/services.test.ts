@@ -99,6 +99,34 @@ describe('Services', () => {
     expect(top?.['2.2'].entry).toMatchObject({ site: 'tvtv.us', site_id: '74916' })
   })
 
+  it('writes the logo of the mapped entry from the database into channels.xml', async () => {
+    await finishSync()
+
+    await services.saveMapping('living-room', {
+      key: '2.1',
+      status: 'mapped',
+      entry: { site: 'tvtv.us', site_id: '18633' }
+    })
+
+    expect(await services.lineups.loadChannelsXml('living-room')).toContain(
+      'xmltv_id="living-room.2.1" lcn="2.1" logo="https://example.com/logos/iontv-east.png">'
+    )
+  })
+
+  it('writes channels.xml without logos while the database is not available', async () => {
+    await finishSync(null)
+
+    await services.saveMapping('living-room', {
+      key: '2.1',
+      status: 'mapped',
+      entry: { site: 'tvtv.us', site_id: '18633' }
+    })
+
+    expect(await services.lineups.loadChannelsXml('living-room')).toContain(
+      'xmltv_id="living-room.2.1" lcn="2.1">WCBS-HD</channel>'
+    )
+  })
+
   it('maps a channel to an index entry, copying the entry from the index', async () => {
     await finishSync()
 
@@ -127,7 +155,7 @@ describe('Services', () => {
       })
     })
     expect(await services.lineups.loadChannelsXml('living-room')).toContain(
-      'site_id="16689" lang="en" xmltv_id="WCBSTV21.us@HD" lcn="2.1">WCBS-HD</channel>'
+      'site_id="16689" lang="en" xmltv_id="living-room.2.1" lcn="2.1">WCBS-HD</channel>'
     )
     await expect(
       services.saveMapping('living-room', {

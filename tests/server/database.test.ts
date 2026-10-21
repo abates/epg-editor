@@ -22,6 +22,16 @@ describe('Database', () => {
     expect(database.channelName('not an id')).toBeNull()
   })
 
+  it('finds logos by xmltv_id like epg does: feed logo first, then the channel logo', () => {
+    expect(database.logo('IONTV.us@East')).toBe('https://example.com/logos/iontv-east.png')
+    expect(database.logo('IONTV.us@Central')).toBe('https://example.com/logos/iontv.png')
+    expect(database.logo('IONTV.us')).toBe('https://example.com/logos/iontv.png')
+    expect(database.logo('Charge.us@SD')).toBe('https://example.com/logos/charge.png')
+    expect(database.logo('NBCLX.us@SD')).toBeNull()
+    expect(database.logo('WCBSTV.us')).toBeNull()
+    expect(database.logo('')).toBeNull()
+  })
+
   describe('find', () => {
     const ids = (query: string, limit?: number) =>
       database.find(query, limit).map(channel => channel.xmltv_id)

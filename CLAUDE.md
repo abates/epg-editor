@@ -59,6 +59,6 @@ For local dev, set `STORAGE_DIR=./dev-data` so nothing writes to `/data`.
 - A fresh epg checkout shows hundreds of "modified" files (upstream CRLF blobs vs. `eol=crlf`). That's expected; don't treat `git status` output there as our bug.
 - `nano-spawn` merges `env` over `process.env`. Use `runCommand` from `src/lib/server/spawn.ts`, which blanks inherited vars, never `nano-spawn` directly.
 - `npm install` in the epg checkout triggers `postinstall: api:load` and `prepare: husky`. Use `npm ci --ignore-scripts` and then `npm run api:load` explicitly.
-- epg's `grab` falls back to `site_id` as the guide channel id when `xmltv_id` is empty. Warn the user about this rather than blocking it.
+- The `xmltv_id` we write to `channels.xml` is the stable guide id `<slug>.<key>` (`guideChannelId`), not the entry's iptv-org `xmltv_id`, so re-mapping never changes the guide's `<channel id>` (FR-X-8). The entry's real `xmltv_id` stays in `mappings.json` and is used for suggestions, validation and the `logo` attribute.
 - `xmltv_id` format is `ChannelID.cc@FeedID` (for example `WCBSTV.us@SD`). The country comes from the `.cc` suffix.
 - Some US sites (for example `tvtv.us`) hard-code a lineup ID in their config URL. See REQUIREMENTS OQ-3.

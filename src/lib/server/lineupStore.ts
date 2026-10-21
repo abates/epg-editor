@@ -5,7 +5,7 @@ import type {
   LineupSourceData
 } from '$lib/types/lineup'
 import type { MappingData, MappingsData } from '$lib/types/mapping'
-import { generateChannelsXml } from '$lib/core/channelsXml'
+import { generateChannelsXml, type ChannelLogo } from '$lib/core/channelsXml'
 import { parsePlaylist } from '$lib/core/playlistParser'
 import { isValidSlug, toSlug } from '$lib/core/slug'
 import { Storage } from './storage'
@@ -41,6 +41,11 @@ export interface LineupLoadError {
   message: string
 }
 
+export interface LineupStoreOptions {
+  // Resolves channel logos for channels.xml; asked on every write, null means no logos
+  logos?: () => Promise<ChannelLogo | null>
+}
+
 export interface LineupListResult {
   lineups: LineupData[]
   errors: LineupLoadError[]
@@ -51,9 +56,11 @@ export interface LineupListResult {
 export class LineupStore {
   readonly storage: Storage
   private readonly queues = new Map<string, Promise<unknown>>()
+  private readonly logos: LineupStoreOptions['logos']
 
-  constructor(storage: Storage) {
+  constructor(storage: Storage, { logos }: LineupStoreOptions = {}) {
     this.storage = storage
+    this.logos = logos
   }
 
   // A broken lineup.json is reported in `errors` and does not hide the other lineups [NFR-REL-1]
@@ -112,7 +119,7 @@ export class LineupStore {
       await this.storage.saveJson(`${tmpDir}/lineup.json`, lineup)
       await this.storage.save(`${tmpDir}/source.m3u`, input.m3u)
       await this.storage.saveJson(`${tmpDir}/mappings.json`, mappings)
-      await this.storage.save(`${tmpDir}/channels.xml`, generateChannelsXml(items, mappings))
+      await this.storage.save(`${tmpDir}/channels.xml`, generateChannelsXml(slug, items, mappings))
       await this.storage.move(tmpDir, this.dir(slug))
     } finally {
       await this.storage.remove(tmpDir)
@@ -267,7 +274,8 @@ export class LineupStore {
 
   async writeChannelsXml(slug: string): Promise<string> {
     const { items } = parsePlaylist(await this.loadSource(slug))
-    const xml = generateChannelsXml(items, await this.loadMappings(slug))
+    const logo = (await this.logos?.()) ?? undefined
+    const xml = generateChannelsXml(slug, items, await this.loadMappings(slug), { logo })
     await this.storage.save(this.file(slug, 'channels.xml'), xml)
 
     return xml

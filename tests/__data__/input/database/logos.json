@@ -1,1 +1,42 @@
-[]
+[
+  {
+    "channel": "Charge.us",
+    "feed": null,
+    "in_use": true,
+    "tags": [],
+    "width": 512,
+    "height": 512,
+    "format": "PNG",
+    "url": "https://example.com/logos/charge.png"
+  },
+  {
+    "channel": "Charge.us",
+    "feed": null,
+    "in_use": true,
+    "tags": [],
+    "width": 512,
+    "height": 512,
+    "format": "PNG",
+    "url": "https://example.com/logos/charge-alt.png"
+  },
+  {
+    "channel": "IONTV.us",
+    "feed": null,
+    "in_use": true,
+    "tags": [],
+    "width": 512,
+    "height": 512,
+    "format": "PNG",
+    "url": "https://example.com/logos/iontv.png"
+  },
+  {
+    "channel": "IONTV.us",
+    "feed": "East",
+    "in_use": true,
+    "tags": [],
+    "width": 512,
+    "height": 512,
+    "format": "PNG",
+    "url": "https://example.com/logos/iontv-east.png"
+  }
+]
