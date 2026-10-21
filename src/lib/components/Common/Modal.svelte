@@ -51,8 +51,18 @@
     }
   })
 
+  // A click fires on the common ancestor of press and release, so a drag between the window
+  // and the backdrop also targets the scroll container. Close only when both were on it
+  let pressedOnBackdrop = false
+
+  function handleBackdropPointerDown(event: PointerEvent) {
+    pressedOnBackdrop = event.target === scrollContainer
+  }
+
   function handleBackdropClick(event: MouseEvent) {
-    if (event.target === scrollContainer) {
+    const isBackdropClick = pressedOnBackdrop && event.target === scrollContainer
+    pressedOnBackdrop = false
+    if (isBackdropClick) {
       event.preventDefault()
       modal.close()
     }
@@ -74,6 +84,7 @@
   <div
     bind:this={scrollContainer}
     onkeydown={handleKeyDown}
+    onpointerdown={handleBackdropPointerDown}
     onclick={handleBackdropClick}
     tabindex="-1"
     role="dialog"
