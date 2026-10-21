@@ -21,7 +21,10 @@
     {#if entry.xmltv_id}
       · {entry.xmltv_id}
     {:else}
-      · <span class="text-amber-600 dark:text-amber-400" title="The guide will use the site ID">
+      · <span
+        class="text-amber-600 dark:text-amber-400"
+        title="Not in the iptv-org database, so the guide has no logo for it"
+      >
         no xmltv_id
       </span>
     {/if}

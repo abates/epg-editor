@@ -37,7 +37,7 @@ describe('validateGuideEntry', () => {
   it('warns about an empty xmltv_id or one missing from the database', () => {
     expect(validateGuideEntry({ ...entry, xmltv_id: '' }, lookup)).toMatchObject({
       errors: {},
-      warnings: ['Without an xmltv_id the guide uses the site ID as the channel id']
+      warnings: ['Without an xmltv_id the guide has no logo from the iptv-org database']
     })
     expect(validateGuideEntry({ ...entry, xmltv_id: 'WXYZ.us' }, lookup)).toMatchObject({
       errors: {},

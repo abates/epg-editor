@@ -3,7 +3,8 @@ import type { RunData } from '$lib/types/run'
 import { RunHistory, LOGS_DIR } from './runHistory'
 import { RunLog, type RunLogger } from './runLog'
 import { runCommand, sanitizedEnv } from './spawn'
-import { LineupStore } from './lineupStore'
+import { LineupStore, type LineupStoreOptions } from './lineupStore'
+import { databaseLogos } from './database'
 import type { Config } from './config'
 import { Storage } from './storage'
 import { EPGGrabber } from 'epg-grabber'
@@ -23,6 +24,8 @@ export interface GrabOptions {
   logger?: RunLogger
   // Overridable so tests can use a stub instead of epg's real grab
   npm?: string
+  // Logos for channels.xml, shared by run:all's grabs; defaults to the checkout's database
+  logos?: LineupStoreOptions['logos']
 }
 
 export interface GuideCounts {
@@ -67,10 +70,12 @@ export function countGuide(xml: string): GuideCounts {
 // The caller holds the run lock
 export async function runGrab(
   slug: string,
-  { config, logger, npm }: GrabOptions
+  { config, logger, npm, logos }: GrabOptions
 ): Promise<RunData> {
   const storage = new Storage(config.storageDir)
-  const store = new LineupStore(storage)
+  const store = new LineupStore(storage, {
+    logos: logos ?? databaseLogos(path.join(config.epgDir, 'temp', 'data'))
+  })
   const history = new RunHistory(storage)
   const startedAt = new Date()
 

@@ -49,7 +49,7 @@ export function validateGuideEntry(
     errors.lang = 'Language must be a two-letter ISO 639-1 code'
 
   if (!value.xmltv_id) {
-    warnings.push('Without an xmltv_id the guide uses the site ID as the channel id')
+    warnings.push('Without an xmltv_id the guide has no logo from the iptv-org database')
   } else if (!XMLTV_ID_PATTERN.test(value.xmltv_id)) {
     errors.xmltv_id = 'xmltv_id must look like ChannelID.cc or ChannelID.cc@Feed'
   } else if (lookup.hasXmltvId && !lookup.hasXmltvId(value.xmltv_id)) {

@@ -242,7 +242,7 @@ export class Matcher {
     }
 
     if (!entry.xmltv_id)
-      add('noXmltvId', weights.noXmltvId, 'no xmltv_id (epg uses site_id as the channel id)')
+      add('noXmltvId', weights.noXmltvId, 'no xmltv_id (not in the iptv-org database)')
 
     return { entry, score: reasons.reduce((sum, reason) => sum + reason.points, 0), reasons }
   }

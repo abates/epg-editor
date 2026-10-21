@@ -106,6 +106,20 @@ describe('runGrab', () => {
     expect(await fs.readdir(storage.path('guides'))).toEqual(['ota.xml', 'ota.xml.gz'])
   })
 
+  it('writes channels.xml with logos from the checkout database before grabbing', async () => {
+    await fs.cp('tests/__data__/input/database', path.join(config.epgDir, 'temp/data'), {
+      recursive: true
+    })
+    const guide = { ...mappings.items['2.1'].guide!, xmltv_id: 'Charge.us@SD' }
+    await store.setMapping('ota', '2.1', { status: 'mapped', guide, updatedAt: '' })
+
+    await runGrab('ota', { config, npm })
+
+    expect(await store.loadChannelsXml('ota')).toContain(
+      'xmltv_id="ota.2.1" lcn="2.1" logo="https://example.com/logos/charge.png">'
+    )
+  })
+
   it('runs grab in the checkout with the channels.xml path and a sanitised env', async () => {
     const previous = process.env.STORAGE_DIR
     process.env.STORAGE_DIR = rootDir

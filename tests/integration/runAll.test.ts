@@ -128,11 +128,12 @@ describe('run:all against iptv-org/epg', () => {
   it('publishes a guide with lcn, display names and programmes [FR-X-3, FR-R-2]', async () => {
     const xml = await fs.readFile(path.join(rootDir, 'data/guides/ota.xml'), 'utf8')
 
+    // Guide ids come from the lineup and channel key, not the mapped entry [#2]
     expect(xml).toMatch(
-      /<channel id="WCBSTV\.us@SD"><display-name>WCBS-HD<\/display-name>.*?<lcn>2\.1<\/lcn>/s
+      /<channel id="ota\.2\.1"><display-name>WCBS-HD<\/display-name>.*?<lcn>2\.1<\/lcn>/s
     )
-    // An empty xmltv_id falls back to site_id
-    expect(xml).toMatch(/<channel id="nbclx">.*?<lcn>4\.10<\/lcn>/s)
+    expect(xml).toMatch(/<channel id="ota\.4\.10">.*?<lcn>4\.10<\/lcn>/s)
+    expect(xml).toMatch(/<programme [^>]*channel="ota\.2\.1"/)
     expect(xml).toContain('wcbs show 0')
     expect(xml.match(/<programme /g)).toHaveLength(4)
     expect(

@@ -1,5 +1,6 @@
 import type { DatabaseChannelData } from '$lib/types/database'
 import type { DatabaseStatsData } from '$lib/types/sync'
+import type { ChannelLogo } from '$lib/core/channelsXml'
 import { parseXmltvId } from '$lib/core/xmltvId'
 import MiniSearch from 'minisearch'
 import * as sdk from '@iptv-org/sdk'
@@ -124,4 +125,16 @@ export class Database {
       feeds: feeds.sort((a, b) => Number(b.is_main) - Number(a.is_main))
     }
   }
+}
+
+// Channel logos for channels.xml outside the web process. The database loads once, on first
+// use; when it can't be loaded, channels.xml is written without logos
+export function databaseLogos(dataDir: string): () => Promise<ChannelLogo | null> {
+  let logos: Promise<ChannelLogo | null> | undefined
+
+  return () =>
+    (logos ??= Database.load(dataDir).then(
+      database => xmltvId => database.logo(xmltvId),
+      () => null
+    ))
 }
