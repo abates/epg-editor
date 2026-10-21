@@ -20,7 +20,8 @@ The application ships as a single Docker image. `iptv-org/epg` is **not** vendor
 | **Lineup** | A named M3U source (e.g. "Living room HDHomeRun") plus its mappings, `channels.xml`, grab settings and generated guide. |
 | **M3U channel** | One `#EXTINF` entry from the uploaded/fetched playlist. |
 | **Guide entry** | One `<channel>` element from a `sites/<site>/*.channels.xml` file in iptv-org/epg (or the local overlay). Identified by `site` + `site_id`. |
-| **xmltv_id** | iptv-org stream ID, `<ChannelID>@<FeedID>` (e.g. `WCBSTV.us@SD`). Becomes the `<channel id>` in the guide. |
+| **xmltv_id** | iptv-org stream ID, `<ChannelID>@<FeedID>` (e.g. `WCBSTV.us@SD`). Used for suggestions, validation and the channel's logo. It is not the guide's `<channel id>`, which is the stable guide id (FR-X-8). |
+| **Guide id** | `<lineup slug>.<M3U key>` (e.g. `ota.5.1`). The `<channel id>` of an M3U channel in the guide. It doesn't change when the channel is re-mapped. |
 | **Mapping** | The association M3U channel → guide entry (or "skipped"). |
 | **Overlay** | A user-mounted directory of site folders (same layout as `iptv-org/epg/sites`) that is merged into the epg checkout. Used to run and test sites that are not yet upstream. |
 | **Sync** | `git clone`/`git pull` of iptv-org/epg, dependency install, API data refresh, overlay linking, and index rebuild. |
@@ -92,7 +93,7 @@ Priority: **MUST** / **SHOULD** / **COULD**.
 | FR-P-5 | MUST | User can mark a channel **Skipped** (excluded from `channels.xml`) and can clear a mapping. |
 | FR-P-6 | MUST | Every mapping change is persisted immediately (no separate "Save" step) and `channels.xml` is regenerated (§5.7). |
 | FR-P-7 | SHOULD | Bulk action: "Accept top suggestion" for selected channels / all channels whose top score ≥ threshold; result shown for review, nothing is applied without a click. |
-| FR-P-8 | SHOULD | Warn when two M3U channels map to the same `xmltv_id` (guide will contain one `<channel>` id; second number would be lost), and when a mapped entry no longer exists after a sync (stale mapping). |
+| FR-P-8 | SHOULD | Warn when a mapped entry no longer exists after a sync (stale mapping). *(Two M3U channels mapped to the same entry used to share one guide `<channel>`. Since FR-X-8 each has its own guide id, so that case needs no warning.)* |
 | FR-P-9 | SHOULD | Show entry provenance badge: `upstream`, `overlay` (local site), `manual`. |
 | FR-P-10 | COULD | Keyboard navigation in the editor (↑/↓ select channel, Enter open, 1–9 pick suggestion, S skip). |
 
@@ -112,7 +113,7 @@ Priority: **MUST** / **SHOULD** / **COULD**.
 | ID | Pri | Requirement |
 | --- | --- | --- |
 | FR-E-1 | MUST | Manual tab lets the user enter `site` (picker of known sites, upstream + overlay), `site_id` (free text), `lang` (ISO 639-1, default from lineup), and `xmltv_id` (free text with search-as-you-type against the iptv-org database channels + feeds). |
-| FR-E-2 | MUST | Validate: `site` exists; `site_id` non-empty; `xmltv_id` matches `^[A-Za-z0-9]+\.[a-z]{2}(@[A-Za-z0-9]+)?$` or is empty. Warn (don't block) if `xmltv_id` is not in the database, or empty (epg falls back to `site_id` as the guide channel id). |
+| FR-E-2 | MUST | Validate: `site` exists; `site_id` non-empty; `xmltv_id` matches `^[A-Za-z0-9]+\.[a-z]{2}(@[A-Za-z0-9]+)?$` or is empty. Warn (don't block) if `xmltv_id` is not in the database, or empty (the guide gets no iptv-org logo for the channel). |
 | FR-E-3 | SHOULD | Show a link to the iptv-org/epg channel-request form and iptv-org/database for missing channels, to encourage contributing upstream. |
 
 ### 5.6 Local site overlay
@@ -138,6 +139,7 @@ Concept: sites that are not (yet) in iptv-org/epg are developed **outside** this
 | FR-X-4 | MUST | Display name = M3U channel name (e.g. `WCBS-HD`), not the guide entry's name; this becomes `<display-name>` in the guide. |
 | FR-X-5 | MUST | Only Mapped channels are written; order by channel number. |
 | FR-X-6 | SHOULD | Download button for `channels.xml` in the UI; read-only preview. |
+| FR-X-8 | MUST | `xmltv_id` in `channels.xml` is the stable guide id `<lineup slug>.<M3U key>` (FR-M-4), not the entry's iptv-org `xmltv_id`. epg uses it as the guide's `<channel id>`, so re-mapping a channel to another site or feed doesn't change its id and clients that keep their own channel mapping (Plex) don't lose it. When the entry has an iptv-org `xmltv_id`, `logo` is that id's logo from the iptv-org database, looked up like epg's grab (feed logo, then channel logo), since epg can no longer find it by the guide id. *(Issue #2.)* |
 | FR-X-7 | SHOULD | Import an existing `channels.xml` into a lineup (match by `lcn` or display name) to migrate prior hand-made files. |
 
 ### 5.8 epg checkout sync

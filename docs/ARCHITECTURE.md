@@ -92,7 +92,7 @@ interface MappingData {
     site: string
     site_id: string
     lang: string | null
-    xmltv_id: string
+    xmltv_id: string        // iptv-org id; channels.xml gets the guide id <slug>.<key> [FR-X-8]
     name: string            // entry name from channels.xml, for display only
     origin: 'upstream' | 'overlay' | 'manual'
   }
