@@ -19,6 +19,14 @@ import { GuideIndex, GuideIndexCache } from './guideIndex'
 import { config as defaultConfig, type Config } from './config'
 import { LineupStore, type LineupLoadError } from './lineupStore'
 import { SYNC_STATUS_FILE, readSyncStatus } from './sync'
+import {
+  clearEpgSourceOverride,
+  readEpgSourceOverride,
+  saveEpgSourceOverride,
+  validateEpgSource,
+  type EpgSourceFieldErrors,
+  type EpgSourceOverrideData
+} from './epgSource'
 import { RunHistory } from './runHistory'
 import { Database } from './database'
 import { Storage } from './storage'
@@ -126,6 +134,27 @@ export class Services {
   // Null until the first sync has finished; a broken file reads as missing
   async syncStatus(): Promise<SyncStatusData | null> {
     return readSyncStatus(this.storage).catch(() => null)
+  }
+
+  // Null while the default (env-configured) repo/branch is in effect
+  async epgSourceOverride(): Promise<EpgSourceOverrideData | null> {
+    return readEpgSourceOverride(this.storage)
+  }
+
+  // Validates before persisting; nothing is saved when the repo or branch/ref doesn't resolve
+  async saveEpgSource(
+    repo: string,
+    ref: string
+  ): Promise<{ ok: true } | { ok: false; errors: EpgSourceFieldErrors }> {
+    const errors = await validateEpgSource(repo, ref)
+    if (Object.keys(errors).length) return { ok: false, errors }
+
+    await saveEpgSourceOverride(this.storage, { repo, ref })
+    return { ok: true }
+  }
+
+  async resetEpgSource(): Promise<void> {
+    await clearEpgSourceOverride(this.storage)
   }
 
   // Editor rows [FR-P-1]

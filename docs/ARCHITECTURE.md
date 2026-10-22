@@ -51,6 +51,7 @@ The structure deliberately mirrors iptv-org/epg's own container (`pm2.config.js`
 │   └── <slug>.xml.gz
 ├── status/
 │   ├── sync.json                 # last sync result, SHA, lockfile hash, overlay report
+│   ├── epg-source-override.json  # optional { repo, ref } from /status, overrides EPG_* env [FR-G-7]
 │   ├── current.json              # step/lineup of the run holding run.lock (removed when it ends)
 │   └── runs/<slug>.json          # last 20 runs
 ├── logs/
@@ -175,6 +176,7 @@ Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src
 │   │       ├── guideIndex.ts         # build/search index; reload on sync.json change
 │   │       ├── database.ts           # @iptv-org/sdk DataManager over /data/epg/temp/data
 │   │       ├── epgRepo.ts            # clone/fetch/reset/npm ci/api:load
+│   │       ├── epgSource.ts          # /status repo/branch override: read/save/clear, git ls-remote validation [FR-G-7]
 │   │       ├── overlay.ts            # link/unlink overlay sites, conflict handling
 │   │       ├── sync.ts               # sync orchestration, shared by run:sync and run:all
 │   │       ├── grabRunner.ts         # build args, spawn, capture log, atomic publish
@@ -225,6 +227,7 @@ Re-import: parse new playlist → keep it in `lineups/<slug>/pending-source.json
 ### 5.3 Sync [5.8]
 Implemented in `server/sync.ts`; the caller holds `run.lock`.
 
+0. Resolve the repo/branch to check out: `status/epg-source-override.json` if one is saved, else `EPG_REPO`/`EPG_BRANCH`/`EPG_REF` (`server/epgSource.ts`, `resolveEpgConfig`) [FR-G-7]. Every entry point (startup, scheduler, "Sync now", "Save & sync") goes through this, so only one source is ever checked out.
 1. Remove overlay links, restore shadowed upstream folders.
 2. First run: `git init` a temp dir next to `/data/epg`, then the fetch below, then rename into place (a failed clone leaves nothing; init + fetch lets `EPG_REF` be a commit). Later runs: `git remote set-url origin $EPG_REPO`, then `git fetch --depth 1 origin <branch|ref>` → `git reset --hard FETCH_HEAD` → `git clean -fd -- sites` (only `sites/`; never touch `node_modules`/`temp`).
 3. If sha256(`package-lock.json`) ≠ stored, or `node_modules` is missing → `npm ci --ignore-scripts`. If that fails, `git reset --hard` back to the previous commit and `npm ci` again, so the last good checkout keeps working.
@@ -253,6 +256,7 @@ A lineup with no mapped channels is recorded as `skipped`. `run:all --lineup=<sl
 - `pm2.config.cjs` runs every app in fork mode. The `scheduler` app runs `@freearhey/chronos` with `npm run run:all`. Like epg's own setup, chronos sends SIGINT to a run that is still going when the next tick fires, so `CRON_SCHEDULE` must leave room for a full run.
 - "Grab now" / "Sync now" → `POST /api/jobs` → `jobs.ts` spawns `npm run run:all -- --lineup=<slug>` / `npm run run:sync` detached, then waits until the command holds `run.lock` (or has exited) before answering. A 409 means another run holds the lock. The `web` app has `treekill: false` so these runs survive a web restart.
 - While the lock is held, the command keeps `status/current.json` up to date (`sync` or `grab` + lineup). `GET /api/jobs` returns `{ running, current }`; the UI polls it and reloads its data when the run ends.
+- "Save & sync" / "Reset to default" on `/status` [FR-G-7]: form actions validate (`git ls-remote`) and persist/clear `status/epg-source-override.json`, then the client calls the same "Sync now" job (`POST /api/jobs`) — no separate run path.
 
 ## 6. Reuse from upstream (do not reinvent)
 

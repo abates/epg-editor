@@ -152,6 +152,7 @@ Concept: sites that are not (yet) in iptv-org/epg are developed **outside** this
 | FR-G-4 | MUST | Rebuild guide-entry index; mark mappings whose entry disappeared as stale (FR-P-8); regenerate all `channels.xml`. |
 | FR-G-5 | MUST | Record sync status: commit SHA, time, duration, result, log tail. A failed sync leaves the previous checkout usable (grab proceeds with last good checkout and logs a warning). |
 | FR-G-6 | SHOULD | `EPG_REF` env pins a tag/commit instead of tracking the branch. |
+| FR-G-7 | SHOULD | `/status` lets the user set a repo/branch override (e.g. a fork + PR branch) that replaces `EPG_REPO`/`EPG_BRANCH`/`EPG_REF` without a restart. Saving validates the repo and branch/ref resolve (`git ls-remote`) before persisting anything and immediately starts a sync against the override; a "Reset to default" action clears it and re-syncs against the env-configured source. The override is stored under `STORAGE_DIR` and survives a restart; `/status` shows whether it's active. *(Issue #5.)* |
 
 ### 5.9 Grab & guide serving
 
@@ -184,7 +185,7 @@ Pages:
 | `/lineups/[slug]` | Mapping editor (5.3). |
 | `/lineups/[slug]/settings` | Filters, grab overrides, M3U source / refresh, delete. |
 | `/lineups/[slug]/runs` | Run history + logs. |
-| `/status` | epg checkout (SHA, branch, last sync), overlay sites & conflicts, index stats, "Sync now". |
+| `/status` | epg checkout (SHA, branch, last sync), repo/branch override (FR-G-7), overlay sites & conflicts, index stats, "Sync now". |
 | `/guides/[slug].xml(.gz)` | Guide files (FR-R-5). |
 
 ## 6. Non-functional requirements
