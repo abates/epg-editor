@@ -7,6 +7,8 @@ export interface MappingGuideData {
   xmltv_id: string
   name: string
   origin: GuideOrigin
+  // Resolved fresh for display (editor rows), never persisted to mappings.json
+  logo?: string | null
 }
 
 export interface MappingData {

@@ -1,19 +1,20 @@
 import type { ChannelCountsData, ChannelRowData } from '$lib/types/channel'
 import type { PlaylistItemData } from '$lib/types/playlist'
-import type { MappingsData } from '$lib/types/mapping'
-import { compareChannelNumbers } from './channelsXml'
+import type { MappingData, MappingsData } from '$lib/types/mapping'
+import { compareChannelNumbers, type ChannelLogo } from './channelsXml'
 
 // One editor row per M3U channel, in channel number order [FR-P-1]. "Suggested" is not
-// stored: the editor shows it for unmapped rows once their top suggestion has loaded
+// stored: the editor shows it for unmapped rows once their top suggestion has loaded. `logo`
+// resolves the mapped entry's current icon for display; it is never written to mappings.json
 export function buildChannelRows(
   items: PlaylistItemData[],
-  mappings: MappingsData
+  mappings: MappingsData,
+  logo?: ChannelLogo
 ): ChannelRowData[] {
   return items
     .map(item => {
-      const mapping = mappings.items[item.key] ?? null
-
-      return {
+      const mapping = withLogo(mappings.items[item.key] ?? null, logo)
+      const row: ChannelRowData = {
         key: item.key,
         number: item.number,
         name: item.name,
@@ -21,8 +22,18 @@ export function buildChannelRows(
         status: mapping?.status ?? 'unmapped',
         mapping
       }
+
+      return row
     })
     .sort((a, b) => compareChannelNumbers(a.number, b.number) || a.name.localeCompare(b.name))
+}
+
+function withLogo(mapping: MappingData | null, logo?: ChannelLogo): MappingData | null {
+  if (!mapping?.guide?.xmltv_id || !logo) return mapping
+
+  const logoUrl = logo(mapping.guide.xmltv_id)
+
+  return logoUrl ? { ...mapping, guide: { ...mapping.guide, logo: logoUrl } } : mapping
 }
 
 // Per-status counts for the lineup list [FR-L-2] and the editor filters [FR-P-2]

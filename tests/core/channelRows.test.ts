@@ -52,6 +52,25 @@ describe('buildChannelRows', () => {
 
     expect(buildChannelRows(items, extra).some(row => row.key === 'gone')).toBe(false)
   })
+
+  it('resolves a mapped row guide logo for display, without changing the stored mapping', () => {
+    const rows = buildChannelRows(items, mappings, xmltvId =>
+      xmltvId === 'WCBSTV.us@SD' ? 'https://example.com/wcbs.png' : null
+    )
+
+    const row = rows.find(row => row.key === '2.1')
+    expect(row?.mapping?.guide?.logo).toBe('https://example.com/wcbs.png')
+    expect(mappings.items['2.1'].guide).not.toHaveProperty('logo')
+  })
+
+  it('leaves the mapping unchanged when the guide has no xmltv_id or the lookup has no logo', () => {
+    const rows = buildChannelRows(items, mappings, () => 'https://example.com/anything.png')
+
+    expect(rows.find(row => row.key === '4.10')?.mapping).toEqual(mappings.items['4.10'])
+    expect(
+      buildChannelRows(items, mappings, () => null).find(row => row.key === '2.1')?.mapping
+    ).toEqual(mappings.items['2.1'])
+  })
 })
 
 describe('countChannels', () => {

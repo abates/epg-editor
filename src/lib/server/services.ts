@@ -12,6 +12,7 @@ import type { LineupData } from '$lib/types/lineup'
 import type { RunData } from '$lib/types/run'
 import { validateGuideEntry, type GuideEntryField } from '$lib/core/mappingValidation'
 import { buildChannelRows, countChannels } from '$lib/core/channelRows'
+import type { ChannelLogo } from '$lib/core/channelsXml'
 import { Matcher, lineupCallSigns } from '$lib/core/matcher'
 import { parsePlaylist } from '$lib/core/playlistParser'
 import { GuideIndex, GuideIndexCache } from './guideIndex'
@@ -56,13 +57,7 @@ export class Services {
 
   constructor(config: Pick<Config, 'storageDir' | 'epgDir'>) {
     this.storage = new Storage(config.storageDir)
-    this.lineups = new LineupStore(this.storage, {
-      logos: async () => {
-        const database = await this.optionalDatabase()
-
-        return database ? xmltvId => database.logo(xmltvId) : null
-      }
-    })
+    this.lineups = new LineupStore(this.storage, { logos: () => this.channelLogo() })
     this.runs = new RunHistory(this.storage)
     this.jobs = new Jobs({ storageDir: config.storageDir })
     this.guideIndex = new GuideIndexCache({
@@ -139,7 +134,8 @@ export class Services {
     if (!lineup) error(404, `Lineup "${slug}" not found`)
 
     const { items, warnings } = parsePlaylist(await this.lineups.loadSource(slug))
-    const rows = buildChannelRows(items, await this.lineups.loadMappings(slug))
+    const logo = (await this.channelLogo()) ?? undefined
+    const rows = buildChannelRows(items, await this.lineups.loadMappings(slug), logo)
 
     return { lineup, rows, counts: countChannels(rows), warnings }
   }
@@ -208,7 +204,11 @@ export class Services {
 
     await this.lineups.setMapping(slug, item.key, mapping)
 
-    return { ok: true, row: toRow(item, mapping), warnings }
+    return {
+      ok: true,
+      row: toRow(item, mapping, (await this.channelLogo()) ?? undefined),
+      warnings
+    }
   }
 
   // FR-P-7: accepts reviewed suggestions in one write. Nothing is saved when any channel or
@@ -222,6 +222,7 @@ export class Services {
     const { items } = parsePlaylist(await this.lineups.loadSource(slug))
     const byKey = new Map(items.map(item => [item.key, item]))
     const index = await this.readyIndex()
+    const logo = (await this.channelLogo()) ?? undefined
     const updatedAt = new Date().toISOString()
 
     const changes: Record<string, MappingData> = {}
@@ -231,7 +232,7 @@ export class Services {
       if (!item) error(404, `Channel "${key}" not found in lineup "${slug}"`)
       const mapping: MappingData = { status: 'mapped', guide: indexGuide(index, entry), updatedAt }
       changes[key] = mapping
-      rows.push(toRow(item, mapping))
+      rows.push(toRow(item, mapping, logo))
     }
     await this.lineups.setMappings(slug, changes)
 
@@ -268,6 +269,14 @@ export class Services {
     }
   }
 
+  // Same lookup channels.xml's `logo` attribute uses, so the editor shows the icon that will
+  // actually be grabbed. Null while the iptv-org database isn't available yet
+  private async channelLogo(): Promise<ChannelLogo | null> {
+    const database = await this.optionalDatabase()
+
+    return database ? xmltvId => database.logo(xmltvId) : null
+  }
+
   private async readyIndex(): Promise<GuideIndex> {
     return (await this.guideIndex.get()) ?? error(503, 'The guide index is not ready yet')
   }
@@ -282,8 +291,16 @@ function indexGuide(index: GuideIndex, request: { site: string; site_id: string 
   return { site, site_id, lang, xmltv_id, name, origin } satisfies MappingGuideData
 }
 
-function toRow(item: PlaylistItemData, mapping: MappingData | null): ChannelRowData {
-  return buildChannelRows([item], { version: 1, items: mapping ? { [item.key]: mapping } : {} })[0]
+function toRow(
+  item: PlaylistItemData,
+  mapping: MappingData | null,
+  logo?: ChannelLogo
+): ChannelRowData {
+  return buildChannelRows(
+    [item],
+    { version: 1, items: mapping ? { [item.key]: mapping } : {} },
+    logo
+  )[0]
 }
 
 export const services = new Services(defaultConfig)
