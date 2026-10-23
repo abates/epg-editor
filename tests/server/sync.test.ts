@@ -153,6 +153,22 @@ describe('runSync', () => {
     ])
   })
 
+  it('explains a lockfile mismatch instead of showing the raw npm error', async () => {
+    const first = await runSync({ config, npm })
+    await commit(remoteDir, {
+      'package-lock.json': '{"lockfileVersion":3,"broken":true}\n',
+      'npm-lockfile-mismatch': ''
+    })
+
+    const status = await runSync({ config, npm })
+
+    expect(status.result).toBe('failed')
+    expect(status.commit).toBe(first.commit)
+    expect(status.error).toMatch(/package-lock\.json doesn't match its package\.json/)
+    expect(status.error).not.toMatch(/npm error/)
+    expect(await storage.load(`logs/${status.log}`)).toMatch(/npm error/)
+  })
+
   it('records a failed first clone without creating a checkout', async () => {
     const status = await runSync({
       config: configWith({ EPG_REPO: `file://${rootDir}/missing` }),

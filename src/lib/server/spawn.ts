@@ -39,6 +39,9 @@ export function sanitizedEnv(
 
 // Runs a command with an argument array (never a shell) and a sanitised env [NFR-SEC-4].
 // stdout and stderr lines go to onLine as they arrive; the combined output is returned.
+// nano-spawn's rejection only names the exit code, since iterating the lines (above) stops it
+// from buffering its own copy of stdout/stderr — so on failure the lines collected here are
+// appended to the error instead, letting callers match on the command's actual output [issue #7]
 export async function runCommand(
   file: string,
   args: string[],
@@ -51,13 +54,25 @@ export async function runCommand(
   })
 
   const lines: string[] = []
-  for await (const line of subprocess) {
-    lines.push(line)
-    options.onLine?.(line)
+  try {
+    for await (const line of subprocess) {
+      lines.push(line)
+      options.onLine?.(line)
+    }
+    await subprocess
+  } catch (error) {
+    throw withOutput(error, lines)
   }
-  await subprocess
 
   return lines.join('\n')
+}
+
+function withOutput(error: unknown, lines: string[]): Error {
+  if (!(error instanceof Error) || lines.length === 0) {
+    return error instanceof Error ? error : new Error(String(error))
+  }
+
+  return new Error(`${error.message}\n${lines.join('\n')}`, { cause: error })
 }
 
 // nano-spawn always merges `env` over process.env. Node drops keys whose value is undefined,

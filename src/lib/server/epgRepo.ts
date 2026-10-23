@@ -18,6 +18,13 @@ export interface CheckoutResult {
   current: string
 }
 
+// `npm ci` refuses to install when the target repo's own package.json and package-lock.json
+// disagree. Its message is safe to show to the user as is [issue #7]
+export class LockfileMismatchError extends Error {}
+
+const LOCKFILE_MISMATCH =
+  '`npm ci` can only install packages when your package.json and package-lock.json'
+
 // The iptv-org/epg checkout under STORAGE_DIR [FR-G-1..3, FR-G-6]
 export class EpgRepo {
   readonly dir: string
@@ -86,7 +93,19 @@ export class EpgRepo {
       return { hash, installed: false }
     }
 
-    await this.runNpm(['ci', '--ignore-scripts'])
+    try {
+      await this.runNpm(['ci', '--ignore-scripts'])
+    } catch (error) {
+      if (error instanceof Error && error.message.includes(LOCKFILE_MISMATCH)) {
+        throw new LockfileMismatchError(
+          "This epg source's package-lock.json doesn't match its package.json. Ask the " +
+            'maintainer of that fork/branch to run `npm install` and commit the updated ' +
+            'lockfile, or pick a different branch.',
+          { cause: error }
+        )
+      }
+      throw error
+    }
 
     return { hash, installed: true }
   }

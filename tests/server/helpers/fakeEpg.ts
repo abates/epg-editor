@@ -62,7 +62,8 @@ const STUB_GUIDE_EMPTY = [
 ].join('\n')
 
 // Stand-in for npm: logs its arguments to npm-calls.log in the checkout, creates node_modules
-// for `ci` and temp/data for `run api:load`, and fails when the checkout has an npm-fail file.
+// for `ci` and temp/data for `run api:load`, and fails when the checkout has an npm-fail file
+// (or, with npm-lockfile-mismatch, fails with the real `npm ci` lockfile-mismatch text).
 // `run grab` writes STUB_GUIDE to --output (and .gz with --gzip); a grab-fail file makes it
 // fail and a grab-empty file makes it write a guide without programmes
 export async function createStubNpm(dir: string): Promise<string> {
@@ -76,6 +77,12 @@ export async function createStubNpm(dir: string): Promise<string> {
       `GUIDE_EMPTY='${STUB_GUIDE_EMPTY}'`,
       'echo "$*" >> npm-calls.log',
       'if [ -e npm-fail ]; then echo "stub npm failed" >&2; exit 1; fi',
+      'if [ -e npm-lockfile-mismatch ]; then',
+      '  echo "npm error" >&2',
+      "  echo 'npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync. Please update your lock file with `npm install` before continuing.' >&2",
+      '  echo "npm error" >&2',
+      '  exit 1',
+      'fi',
       'if [ "$1" = "ci" ]; then mkdir -p node_modules; fi',
       'if [ "$1 $2" = "run api:load" ]; then mkdir -p temp/data; fi',
       'if [ "$1 $2" = "run grab" ]; then',

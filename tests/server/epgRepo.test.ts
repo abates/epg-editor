@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { EpgRepo } from '$lib/server/epgRepo'
+import { EpgRepo, LockfileMismatchError } from '$lib/server/epgRepo'
 import { commit, createRemote, createStubNpm, git, npmCalls } from './helpers/fakeEpg'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -107,6 +107,18 @@ describe('EpgRepo', () => {
     await fs.rm(path.join(epgDir, 'node_modules'), { recursive: true })
 
     expect((await repo.install(hash)).installed).toBe(true)
+  })
+
+  it('explains that the target repo lockfile is out of sync, not a raw npm error', async () => {
+    const repo = createRepo()
+    await repo.checkout()
+    await fs.writeFile(path.join(epgDir, 'npm-lockfile-mismatch'), '')
+
+    const error = await repo.install(null).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(LockfileMismatchError)
+    expect((error as Error).message).toMatch(/package-lock\.json doesn't match its package\.json/)
+    expect((error as Error).message).not.toMatch(/npm error/)
   })
 
   it('loads api data with npm run api:load', async () => {
