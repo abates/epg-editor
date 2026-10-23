@@ -1,13 +1,43 @@
 <script lang="ts">
   import { Alert, JobButton, RunLog, RunResultBadge } from '$lib/components'
   import { formatDuration } from '$lib/core/formatDuration'
+  import { jobs } from '$lib/jobs.svelte'
+  import { toast } from '@zerodevx/svelte-toast'
+  import { enhance } from '$app/forms'
   import { resolve } from '$app/paths'
   import * as Icon from '$lib/icons'
+  import type { SubmitFunction } from '@sveltejs/kit'
   import type { PageProps } from './$types'
 
-  let { data }: PageProps = $props()
+  let { data, form }: PageProps = $props()
 
   const sync = $derived(data.sync)
+  const override = $derived(data.epgOverride)
+  const effectiveRepo = $derived(override?.repo ?? data.epg.repo)
+  const effectiveRef = $derived(override?.ref ?? data.epg.ref ?? data.epg.branch)
+
+  // Submitted values after a failed save, otherwise what's currently in effect
+  const failedValues = $derived(form?.action === 'saveEpgSource' ? form.values : undefined)
+  const errors = $derived((form?.action === 'saveEpgSource' ? form.errors : undefined) ?? {})
+
+  let busy: 'save' | 'reset' | null = $state(null)
+
+  // Save/reset only validate and persist the override; the sync itself reuses the existing
+  // "Sync now" job (lock, log, status/sync.json) once that succeeds [issue #5]
+  function submitSource(): SubmitFunction {
+    return ({ action }) => {
+      const name = action.search.includes('resetEpgSource') ? 'reset' : 'save'
+      busy = name
+      return async ({ update, result }) => {
+        await update({ reset: false })
+        busy = null
+        if (result.type === 'success') {
+          toast.push(name === 'save' ? 'Epg source saved, syncing…' : 'Reset to default, syncing…')
+          jobs.start('sync')
+        }
+      }
+    }
+  }
 </script>
 
 <svelte:head>
@@ -49,14 +79,78 @@
   <section
     class="rounded-md bg-white dark:bg-primary-810 border border-gray-200 dark:border-gray-700 p-4 text-sm"
   >
-    <h2 class="text-gray-900 dark:text-white font-medium mb-2">epg checkout</h2>
+    <div class="flex items-center gap-2 mb-2">
+      <h2 class="text-gray-900 dark:text-white font-medium">epg checkout</h2>
+      {#if override}
+        <span
+          class="inline-flex items-center h-5.5 px-2 py-0.5 rounded-full text-xs bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
+          title="A repo/branch override is active instead of the env-configured default"
+          >testing fork</span
+        >
+      {/if}
+    </div>
     <dl>
-      {@render row('Repository', data.epg.repo, true)}
-      {@render row(data.epg.ref ? 'Pinned ref' : 'Branch', data.epg.ref ?? data.epg.branch, true)}
+      {@render row('Repository', effectiveRepo, true)}
+      {@render row('Branch / ref', effectiveRef, true)}
       {@render row('Commit', sync?.commit, true)}
       {@render row('Directory', data.epg.dir, true)}
       {@render row('Schedule', data.schedule, true)}
     </dl>
+
+    <!-- Allow setting the iptv-org/epg repo and branch from the UI: issue #5 -->
+    <form
+      method="POST"
+      action="?/saveEpgSource"
+      class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-col gap-4"
+      use:enhance={submitSource()}
+    >
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label for="epg-repo" class="field-label">Repository URL</label>
+          <input
+            id="epg-repo"
+            name="repo"
+            class="field font-mono"
+            placeholder="https://github.com/<user>/epg.git"
+            value={failedValues?.repo ?? effectiveRepo}
+            required
+          />
+          {#if errors.repo}<p class="field-error">{errors.repo}</p>{/if}
+        </div>
+        <div>
+          <label for="epg-ref" class="field-label">Branch / ref</label>
+          <input
+            id="epg-ref"
+            name="ref"
+            class="field font-mono"
+            value={failedValues?.ref ?? effectiveRef}
+            required
+          />
+          {#if errors.ref}<p class="field-error">{errors.ref}</p>{/if}
+        </div>
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400">
+        Saving validates that the repo and branch/ref resolve, then starts a sync against them
+        immediately. A failed sync keeps the previous checkout usable.
+      </p>
+      <div class="flex flex-wrap justify-end gap-2">
+        {#if override}
+          <button
+            type="submit"
+            formaction="?/resetEpgSource"
+            class="btn-secondary"
+            disabled={busy !== null}
+          >
+            {#if busy === 'reset'}<Icon.Spinner size={16} />{/if}
+            Reset to default
+          </button>
+        {/if}
+        <button type="submit" class="btn-primary" disabled={busy !== null}>
+          {#if busy === 'save'}<Icon.Spinner size={16} />{/if}
+          Save & sync
+        </button>
+      </div>
+    </form>
   </section>
 
   {#if sync}

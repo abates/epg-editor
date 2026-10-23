@@ -6,6 +6,7 @@ import { GuideIndex } from './guideIndex'
 import type { Config } from './config'
 import { Database } from './database'
 import { EpgRepo } from './epgRepo'
+import { resolveEpgConfig } from './epgSource'
 import { Overlay } from './overlay'
 import { Storage } from './storage'
 
@@ -42,9 +43,11 @@ export async function runSync({ config, logger, npm }: SyncOptions): Promise<Syn
   let index: GuideIndex | null = null
   let database: Database | null = null
 
+  // A saved /status override takes over from EPG_REPO/EPG_BRANCH/EPG_REF (issue #5)
+  const epg = await resolveEpgConfig(storage, config.epg)
   const repo = new EpgRepo({
     dir: config.epgDir,
-    ...config.epg,
+    ...epg,
     npm,
     onLine: line => log.line(line)
   })

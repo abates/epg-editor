@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readSyncStatus, runSync } from '$lib/server/sync'
+import { clearEpgSourceOverride, saveEpgSourceOverride } from '$lib/server/epgSource'
 import { LineupStore } from '$lib/server/lineupStore'
 import { loadConfig, type Config } from '$lib/server/config'
 import { parsePlaylist } from '$lib/core/playlistParser'
@@ -162,6 +163,34 @@ describe('runSync', () => {
     expect(status.commit).toBeNull()
     expect(status.index).toBeNull()
     expect(await fs.readdir(config.storageDir)).not.toContain('epg')
+  })
+
+  it('checks out a saved /status override instead of the env-configured repo/branch', async () => {
+    const forkDir = path.join(rootDir, 'fork')
+    const forkUrl = await createRemote(forkDir)
+    const forkCommit = await commit(forkDir, { FORK_MARKER: 'x' })
+    await saveEpgSourceOverride(storage, { repo: forkUrl, ref: 'master' })
+
+    const status = await runSync({ config, npm })
+
+    expect(status.result).toBe('success')
+    expect(status.repo).toBe(forkUrl)
+    expect(status.ref).toBe('master')
+    expect(status.commit).toBe(forkCommit)
+  })
+
+  it('goes back to the env-configured repo/branch once the override is reset', async () => {
+    const forkDir = path.join(rootDir, 'fork')
+    const forkUrl = await createRemote(forkDir)
+    await saveEpgSourceOverride(storage, { repo: forkUrl, ref: 'master' })
+    await runSync({ config, npm })
+
+    await clearEpgSourceOverride(storage)
+    const status = await runSync({ config, npm })
+
+    expect(status.result).toBe('success')
+    expect(status.repo).toBe(remoteUrl)
+    expect(status.commit).toBe(git(remoteDir, ['rev-parse', 'HEAD']))
   })
 
   it('keeps the last 20 sync logs', async () => {
