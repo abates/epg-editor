@@ -9,12 +9,14 @@ import type { SuggestionData } from '$lib/types/suggestion'
 import type { PlaylistItemData } from '$lib/types/playlist'
 import type { SyncStatusData } from '$lib/types/sync'
 import type { LineupData } from '$lib/types/lineup'
+import type { GuideViewData } from '$lib/types/guideView'
 import type { RunData } from '$lib/types/run'
 import { validateGuideEntry, type GuideEntryField } from '$lib/core/mappingValidation'
 import { buildChannelRows, countChannels } from '$lib/core/channelRows'
 import type { ChannelLogo } from '$lib/core/channelsXml'
 import { Matcher, lineupCallSigns } from '$lib/core/matcher'
 import { parsePlaylist } from '$lib/core/playlistParser'
+import { buildGuideView } from '$lib/core/epgGuide'
 import { GuideIndex, GuideIndexCache } from './guideIndex'
 import { config as defaultConfig, type Config } from './config'
 import { LineupStore, type LineupLoadError } from './lineupStore'
@@ -28,10 +30,13 @@ import {
   type EpgSourceOverrideData
 } from './epgSource'
 import { RunHistory } from './runHistory'
+import { GUIDES_DIR } from './grabRunner'
 import { Database } from './database'
 import { Storage } from './storage'
 import { Jobs } from './jobs'
+import { parseXmltv } from '@iptv/xmltv'
 import { error } from '@sveltejs/kit'
+import fs from 'node:fs/promises'
 import path from 'node:path'
 
 // Long-lived state of the web process. The matcher and database belong to one guide index,
@@ -47,6 +52,11 @@ export interface LineupViewData {
   rows: ChannelRowData[]
   counts: ChannelCountsData
   warnings: string[]
+}
+
+export interface GuideViewResult {
+  lineup: LineupData
+  guide: GuideViewData | null
 }
 
 export type SaveMappingResult =
@@ -167,6 +177,27 @@ export class Services {
     const rows = buildChannelRows(items, await this.lineups.loadMappings(slug), logo)
 
     return { lineup, rows, counts: countChannels(rows), warnings }
+  }
+
+  // In-app episode guide viewer [issue #9]: parses the file FR-R-5 is currently serving, so it
+  // always mirrors the last successful grab. Null guide while the lineup has never been grabbed
+  async guideView(slug: string): Promise<GuideViewResult> {
+    const lineup = await this.lineups.get(slug)
+    if (!lineup) error(404, `Lineup "${slug}" not found`)
+
+    const filepath = this.storage.path(GUIDES_DIR, `${slug}.xml`)
+    const stat = await fs.stat(filepath).catch(() => null)
+    if (!stat?.isFile()) return { lineup, guide: null }
+
+    const xml = await fs.readFile(filepath, 'utf8')
+    const { items } = parsePlaylist(await this.lineups.loadSource(slug))
+    const mappings = await this.lineups.loadMappings(slug)
+    const logo = (await this.channelLogo()) ?? undefined
+
+    return {
+      lineup,
+      guide: buildGuideView(parseXmltv(xml), slug, items, mappings, stat.mtime, logo)
+    }
   }
 
   // Best suggestion per unmapped channel, for the editor's "Suggested" badges. Null while

@@ -58,6 +58,13 @@ Each milestone ends in a working, tested, committed state. Requirement IDs refer
 
 - Bulk accept (FR-P-7), duplicate/stale warnings (FR-P-8), live grab progress (FR-R-7), import existing `channels.xml` (FR-X-7), keyboard navigation (FR-P-10), accessibility pass (FR-U-5).
 
+## M8 — Episode guide viewer
+
+- `core/epgGuide.ts`: builds the grid's channel/programme view-model from a parsed guide file plus the lineup's current mappings (FR-V-2); `@iptv/xmltv` for XMLTV parsing.
+- `server/services.ts` `guideView()`; `/lineups/[slug]/guide` (FR-V-1, FR-V-3, FR-V-4), linked from the lineup screen.
+- `GuideGrid` component: sticky channel column + hour header, virtualized rendering of the visible time window (FR-V-5), "Now" indicator.
+- **Done when:** a fixture lineup with a generated guide renders a scrollable, logo-correct grid in the browser, light and dark.
+
 ## Later (out of v1 scope)
 
 - FUT-1 rewritten M3U (`/playlists/<slug>.m3u` with `tvg-id`/`tvg-chno`), FUT-2 merged guide, FUT-3 HDHomeRun discovery, FUT-4 auth, FUT-5 per-lineup schedules.

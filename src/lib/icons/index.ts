@@ -1,4 +1,5 @@
 export { default as ArrowLeft } from './ArrowLeft.svelte'
+export { default as Calendar } from './Calendar.svelte'
 export { default as CheckboxChecked } from './CheckboxChecked.svelte'
 export { default as CheckboxDisabled } from './CheckboxDisabled.svelte'
 export { default as CheckboxIndeterminate } from './CheckboxIndeterminate.svelte'

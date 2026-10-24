@@ -166,7 +166,17 @@ Concept: sites that are not (yet) in iptv-org/epg are developed **outside** this
 | FR-R-6 | MUST | Per-lineup run history (last 20): start, end, result, channel count, program count, log file. Log viewer in UI (tail). |
 | FR-R-7 | SHOULD | Live progress in UI while a grab runs (polling or SSE of `[i/total]` lines from epg output). |
 
-### 5.10 UI / look and feel
+### 5.10 Episode guide viewer
+
+| ID | Pri | Requirement |
+| --- | --- | --- |
+| FR-V-1 | MUST | `/lineups/[slug]/guide`, reachable from the lineup screen, shows the lineup's published guide (`/data/guides/<slug>.xml`, FR-R-5) as a channel × time grid: channels down the left, a horizontally scrollable timeline across the top, programme blocks positioned by start/stop. Read-only; no empty-guide error, an empty state instead (consistent with FR-R-5's 404 for the raw file). |
+| FR-V-2 | MUST | Channel display name and number come from the guide file itself (`<display-name>`, `<lcn>`), so the view always matches what was actually grabbed, even if mappings changed since. Logo is resolved live from the channel's *current* mapping (`Database.logo`, same lookup as the editor / `GuideEntryLabel`, e2e2d7f), never a value read from the guide file, so a re-mapping shows its new icon immediately. |
+| FR-V-3 | MUST | Programme start/stop (XMLTV instants with an explicit UTC offset) render in the browser's local time; a missing `stop` is treated as zero-length rather than an error. |
+| FR-V-4 | MUST | Time range covers whatever the guide actually contains (driven by the lineup's `grab.days`); free horizontal scroll, not day-paged. A "Now" control jumps to the current time when it falls within the guide's range. |
+| FR-V-5 | SHOULD | Only programmes within the visible time window (+ a small buffer) are rendered, so a guide with many channels/days doesn't put thousands of blocks in the DOM at once. |
+
+### 5.11 UI / look and feel
 
 | ID | Pri | Requirement |
 | --- | --- | --- |
@@ -185,6 +195,7 @@ Pages:
 | `/lineups/[slug]` | Mapping editor (5.3). |
 | `/lineups/[slug]/settings` | Filters, grab overrides, M3U source / refresh, delete. |
 | `/lineups/[slug]/runs` | Run history + logs. |
+| `/lineups/[slug]/guide` | Episode guide viewer (5.10). |
 | `/status` | epg checkout (SHA, branch, last sync), repo/branch override (FR-G-7), overlay sites & conflicts, index stats, "Sync now". |
 | `/guides/[slug].xml(.gz)` | Guide files (FR-R-5). |
 
