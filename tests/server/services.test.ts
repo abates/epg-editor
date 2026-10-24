@@ -241,4 +241,42 @@ describe('Services', () => {
       status: 404
     })
   })
+
+  it('has no guide for a lineup that has never been grabbed', async () => {
+    const { lineup, guide } = await services.guideView('living-room')
+    expect(lineup.slug).toBe('living-room')
+    expect(guide).toBeNull()
+    await expect(services.guideView('kitchen')).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('parses the published guide, resolving logos from the current mapping [issue #9]', async () => {
+    await finishSync()
+    await services.saveMapping('living-room', {
+      key: '2.1',
+      status: 'mapped',
+      entry: { site: 'tvtv.us', site_id: '18633' }
+    })
+
+    const guideXml = `<?xml version="1.0" encoding="UTF-8"?>
+<tv>
+  <channel id="living-room.2.1"><display-name>WCBS-HD</display-name><lcn>2.1</lcn></channel>
+  <programme start="20261020000000 +0000" stop="20261020003000 +0000" channel="living-room.2.1">
+    <title>Early Show</title>
+  </programme>
+</tv>
+`
+    await fs.mkdir(path.join(rootDir, 'guides'), { recursive: true })
+    await fs.writeFile(path.join(rootDir, 'guides', 'living-room.xml'), guideXml)
+
+    const { guide } = await services.guideView('living-room')
+    expect(guide?.channels).toMatchObject([
+      {
+        key: '2.1',
+        name: 'WCBS-HD',
+        number: '2.1',
+        logo: 'https://example.com/logos/iontv-east.png'
+      }
+    ])
+    expect(guide?.channels[0].programs).toMatchObject([{ title: 'Early Show' }])
+  })
 })

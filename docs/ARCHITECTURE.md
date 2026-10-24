@@ -146,6 +146,7 @@ Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src
 │   │   │   ├── ChannelTable/ ChannelRow/
 │   │   │   ├── MappingModal/     # Suggestions / Search / Manual tabs
 │   │   │   ├── RunLog/  RunResultBadge/  JobButton/
+│   │   │   ├── GuideGrid/        # episode guide viewer's channel × time grid [5.10]
 │   │   │   └── index.ts
 │   │   ├── icons/                # one Svelte SVG per icon, `size` prop (site convention)
 │   │   ├── actions/              # clickOutside, tippy
@@ -164,6 +165,7 @@ Mirrors iptv-org.github.io (`src/lib/{components,icons,actions,types,…}`, `src
 │   │   │   ├── mappingValidation.ts  # manual entry checks + mapping request shape [FR-E-2]
 │   │   │   ├── formValues.ts         # list / optional-integer form fields
 │   │   │   ├── guideFile.ts          # /guides file names, ETag, conditional requests [FR-R-5]
+│   │   │   ├── epgGuide.ts           # parsed guide + current mappings → grid view-model [5.10]
 │   │   │   ├── formatDuration.ts     # run durations for the UI
 │   │   │   └── escapeString.ts       # port of epg's escapeString
 │   │   ├── models/               # Lineup, PlaylistItem, Mapping, GuideEntry

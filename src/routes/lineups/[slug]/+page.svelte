@@ -145,6 +145,9 @@
       >
         <Icon.Code size={16} /> channels.xml
       </button>
+      <a href={resolve('/lineups/[slug]/guide', { slug: data.lineup.slug })} class="btn-secondary">
+        <Icon.Calendar size={16} /> Guide
+      </a>
       <a href={resolve('/lineups/[slug]/runs', { slug: data.lineup.slug })} class="btn-secondary">
         <Icon.Play size={16} /> Runs
       </a>
