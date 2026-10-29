@@ -1,0 +1,15 @@
+# Example of adding epg-editor to an existing docker-compose.yml.
+# Drop this service block in alongside whatever else you already run.
+
+services:
+  epg-editor:
+    image: epg-editor:latest
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SD_USERNAME: "${SD_USERNAME}"
+      SD_PASSWORD: "${SD_PASSWORD}"
+    volumes:
+      - ./epg-editor-data:/data
