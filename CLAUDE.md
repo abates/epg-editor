@@ -121,6 +121,14 @@ Dependency direction: `api/` and `scheduler/` → `services/` → `sd_client/` +
      `group-title`, channel number if present) to pre-populate the channel
      list. The stream URL is retained only as metadata on the channel record —
      epg-editor does not proxy or manage streams.
+   - **Re-importing M3U into an existing lineup:** match incoming entries to
+     existing channels by `tvgId` (fallback: channel number). Update matched
+     channels' metadata in place (preserving their confirmed mapping).
+     Unmatched incoming entries are added as new channels. Existing channels
+     that no longer appear in the new M3U are **flagged as missing, not
+     auto-deleted** — the user confirms removal in the UI. This avoids
+     silently discarding a channel's confirmed mapping because of a flaky or
+     partial M3U fetch.
 2. **Manage SchedulesDirect account lineups.** Full CRUD against the user's SD
    account lineups (SD calls these "lineups"/headend subscriptions) via the SD
    API: list, add, remove. SD accounts have a limited number of lineup slots —
@@ -135,7 +143,11 @@ Dependency direction: `api/` and `scheduler/` → `services/` → `sd_client/` +
    locking in, per the user's library-selection preference). Each suggestion
    carries a confidence score. The user can:
    - Accept/reject suggestions individually.
-   - **Bulk-accept** all suggestions at or above a confidence threshold.
+   - **Bulk-accept** all suggestions at or above a confidence threshold. The
+     threshold is a **fixed backend default (not a UI control)** — pick a
+     starting value (e.g. `0.85`) and tune it during implementation based on
+     real matching results; exposing it as a user-adjustable setting is not
+     in scope.
 5. **Generate XMLTV.** For every channel with a confirmed mapping, pull cached
    SD schedule/program data and emit a valid XMLTV document. Default to one
    XMLTV file per epg-editor lineup (Plex/Jellyfin each typically point at one
@@ -143,6 +155,17 @@ Dependency direction: `api/` and `scheduler/` → `services/` → `sd_client/` +
    the previous version.
 6. **Serve XMLTV.** Expose each generated file at a stable HTTP path
    (e.g. `/xmltv/{lineup-id}.xml`) as a static file response.
+
+### Reserved URL path prefixes
+
+The single backend process serves the JSON API, generated XMLTV files, and
+the static React app on one port, so these prefixes are reserved to avoid
+collisions (e.g. a lineup whose id/slug happens to be `api`):
+
+- `/api/*` — all JSON API routes (FastAPI routers).
+- `/xmltv/*` — all generated-guide output (e.g. `/xmltv/{lineup-id}.xml`).
+- Everything else falls through to the static React app / its client-side
+  router.
 
 ## Persistent data layout (no database)
 
@@ -185,12 +208,17 @@ performance.
 
 ## Docker
 
-- Single multi-stage `Dockerfile`:
+- Single multi-stage `Dockerfile` **at the repo root** (matches
+  `docker-compose.example.yml`'s `build: .`):
   1. Node stage runs `npm install` + build to produce the frontend's
      production static assets.
   2. Python stage installs backend dependencies with `uv` (from
      `backend/pyproject.toml` + `uv.lock`), copies the backend source and the
      built frontend assets, and runs the single server process.
+- An entrypoint script (if needed, e.g. to ensure `/data/{config,cache,output}`
+  exist before the app starts) lives at `docker/entrypoint.sh` and is `COPY`'d
+  into the image by the root `Dockerfile` — only the `Dockerfile` itself must
+  be at the root.
 - Provide a `docker-compose.example.yml` showing the volume mount for `/data`
   and the required SD credential environment variables. Keep it client-neutral
   — do not add Plex- or Jellyfin-specific setup steps anywhere in the repo
@@ -222,9 +250,11 @@ epg-editor/
 │       ├── components/   # React + TypeScript, styled-components
 │       ├── pages/        # route-level views (TypeScript)
 │       └── types/        # shared TypeScript types
-├── docker/            # Dockerfile, entrypoint script
+├── docker/
+│   └── entrypoint.sh  # copied into the image by the root Dockerfile
 ├── docs/              # architecture docs (this file links to them)
 ├── .devcontainer/     # VS Code dev container config
+├── Dockerfile
 ├── docker-compose.example.yml
 ├── README.md
 └── CLAUDE.md

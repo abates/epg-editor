@@ -28,6 +28,7 @@ Not regenerable from SchedulesDirect — back this up, don't treat it as cache.
           "logoUrl": "https://...",
           "tvgId": "KGO.us",
           "sourceStreamUrl": "http://hdhomerun.local/auto/v7.1",
+          "missingSince": null,
           "mapping": {
             "sdStationId": "10123",
             "sdLineupId": "USA-OTA-12345",
@@ -49,6 +50,12 @@ Notes:
 
 - `sourceStreamUrl` is retained purely as metadata (useful context when
   re-importing/refreshing from M3U); epg-editor never proxies or plays streams.
+- `missingSince`: `null` normally. When an `m3u`-sourced lineup is
+  re-imported and this channel's `tvgId` (fallback: `number`) no longer
+  appears in the new M3U, set this to the re-import timestamp instead of
+  deleting the channel — its confirmed mapping is preserved until the user
+  explicitly removes it in the UI. Re-importing again with the channel
+  present clears it back to `null`.
 - `mapping` is `null`/absent until the user has at least suggestions computed;
   `confirmed: false` with `suggestions` populated is the "needs review" state
   the UI's bulk-accept flow operates on.
