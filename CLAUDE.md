@@ -28,6 +28,9 @@ not defaults to reconsider:
   API token obtained at runtime may be cached in memory or in the cache
   directory (not the config file).
 - **Backend: Python, FastAPI.** Locked in — not a default to swap out.
+- **Python dependency management and builds: `uv`.** Not pip/poetry/pipenv
+  directly. `backend/pyproject.toml` + `uv.lock` define dependencies; install
+  with `uv sync`; the Docker build's Python stage uses `uv` as well.
 - **Backend data models: Pydantic.** Every structured object that crosses a
   boundary — SD API requests/responses, the `config/lineups.json` contents,
   FastAPI request/response bodies — is a Pydantic model, not a raw dict.
@@ -35,9 +38,17 @@ not defaults to reconsider:
   (de)serialization layer in its place.
 - **Scheduled tasks: APScheduler.** Locked in as the in-process scheduler —
   no external task queue/broker.
-- **Frontend: React, styled-components for all styling.** Do not introduce
-  Tailwind, CSS Modules, or other styling systems. See
+- **Frontend: React + TypeScript, styled-components for all styling.** Do not
+  introduce Tailwind, CSS Modules, or other styling systems. See
   [github.com/styled-components/styled-components](https://github.com/styled-components/styled-components).
+- **Frontend dependency management: plain `npm`.** No yarn, pnpm, or
+  monorepo/workspace tooling — `frontend/package.json` + `package-lock.json`,
+  installed with `npm install`.
+- **Frontend API client: vanilla JavaScript, isolated from presentation
+  code.** The module responsible for calling the epg-editor backend API
+  (`frontend/src/api/`) is plain `.js`, not `.ts`/`.tsx`, and contains no
+  React/JSX or styled-components — it's a clean HTTP client the rest of the
+  (TypeScript) app imports. See "Frontend module layout" below.
 - **Single Docker image.** Multi-stage build: build the React app, then copy
   the static build output into the Python backend image. One process
   (e.g. `uvicorn`) serves the API, the static frontend, and the generated
@@ -84,6 +95,22 @@ should straddle two of these responsibilities:
 
 Dependency direction: `api/` and `scheduler/` → `services/` → `sd_client/` +
 `storage/` → `models/`. Lower layers never import from higher ones.
+
+## Frontend module layout (separation of concerns)
+
+- **`frontend/src/api/`** — vanilla JavaScript. The only place that issues
+  HTTP requests to the epg-editor backend. No React, no JSX, no
+  styled-components, no TypeScript-specific syntax — plain functions/modules
+  that presentational code imports and calls. Keeping this in plain JS (not
+  TS) is intentional, not an oversight.
+- **`frontend/src/components/`, `frontend/src/pages/`** — TypeScript (`.tsx`),
+  all styling via styled-components. These call into `api/` for data; they
+  never construct `fetch`/HTTP calls themselves.
+- **`frontend/src/types/`** — shared TypeScript types for domain objects
+  (mirroring the backend's Pydantic models / `docs/data-model.md`).
+- `tsconfig.json` must set `"allowJs": true` (and ideally `"checkJs": false`)
+  so the plain-JS `api/` directory coexists with the rest of the
+  TypeScript app without being type-checked as if it were TS.
 
 ## Core workflows
 
@@ -146,7 +173,9 @@ performance.
 
 ## Frontend conventions
 
-- React, styled-components only for styling.
+- React + TypeScript, styled-components only for styling.
+- Plain `npm` for dependency management (no yarn/pnpm). See "Frontend module
+  layout" above for the vanilla-JS `api/` vs. TypeScript presentation split.
 - Suggested but **not yet locked** libraries to evaluate at implementation
   time (recommend options, let the user decide — do not just pick silently):
   server state/data fetching (e.g. TanStack Query), routing (e.g. React
@@ -157,9 +186,11 @@ performance.
 ## Docker
 
 - Single multi-stage `Dockerfile`:
-  1. Node stage builds the frontend (production static assets).
-  2. Python stage copies the backend source + the built frontend assets, and
-     runs the single server process.
+  1. Node stage runs `npm install` + build to produce the frontend's
+     production static assets.
+  2. Python stage installs backend dependencies with `uv` (from
+     `backend/pyproject.toml` + `uv.lock`), copies the backend source and the
+     built frontend assets, and runs the single server process.
 - Provide a `docker-compose.example.yml` showing the volume mount for `/data`
   and the required SD credential environment variables. Keep it client-neutral
   — do not add Plex- or Jellyfin-specific setup steps anywhere in the repo
@@ -185,7 +216,12 @@ epg-editor/
 │       ├── storage/      # JSON config/cache/output file I/O
 │       ├── models/       # Pydantic models (domain + SD schemas)
 │       └── scheduler/    # APScheduler setup and jobs
-├── frontend/          # React + styled-components app
+├── frontend/
+│   └── src/
+│       ├── api/          # vanilla JS backend API client (no React/TS)
+│       ├── components/   # React + TypeScript, styled-components
+│       ├── pages/        # route-level views (TypeScript)
+│       └── types/        # shared TypeScript types
 ├── docker/            # Dockerfile, entrypoint script
 ├── docs/              # architecture docs (this file links to them)
 ├── .devcontainer/     # VS Code dev container config

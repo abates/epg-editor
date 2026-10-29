@@ -5,17 +5,18 @@ set -euo pipefail
 # Safe to run before backend/frontend scaffolding is added — each step
 # no-ops if its manifest isn't present yet.
 
+if ! command -v uv >/dev/null 2>&1; then
+  echo "Installing uv..."
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+fi
+export PATH="$HOME/.local/bin:$PATH"
+
 if [ -f backend/pyproject.toml ]; then
-  echo "Installing backend (Python) dependencies..."
-  pip install --upgrade pip
-  pip install -e "./backend[dev]"
-elif [ -f backend/requirements.txt ]; then
-  echo "Installing backend (Python) dependencies..."
-  pip install --upgrade pip
-  pip install -r backend/requirements.txt
+  echo "Installing backend (Python) dependencies with uv..."
+  (cd backend && uv sync)
 fi
 
 if [ -f frontend/package.json ]; then
-  echo "Installing frontend (Node) dependencies..."
+  echo "Installing frontend (Node) dependencies with npm..."
   npm --prefix frontend install
 fi
