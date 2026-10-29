@@ -27,9 +27,14 @@ not defaults to reconsider:
   config, never logged, never cached to disk in plaintext. The short-lived SD
   API token obtained at runtime may be cached in memory or in the cache
   directory (not the config file).
-- **Backend: Python.** Framework choice is FastAPI (async, OpenAPI schema for
-  free, pairs well with an in-process scheduler) unless a future agent has a
-  strong reason to deviate — confirm with the user before switching frameworks.
+- **Backend: Python, FastAPI.** Locked in — not a default to swap out.
+- **Backend data models: Pydantic.** Every structured object that crosses a
+  boundary — SD API requests/responses, the `config/lineups.json` contents,
+  FastAPI request/response bodies — is a Pydantic model, not a raw dict.
+  This is true even though there's no database: Pydantic is the validation/
+  (de)serialization layer in its place.
+- **Scheduled tasks: APScheduler.** Locked in as the in-process scheduler —
+  no external task queue/broker.
 - **Frontend: React, styled-components for all styling.** Do not introduce
   Tailwind, CSS Modules, or other styling systems. See
   [github.com/styled-components/styled-components](https://github.com/styled-components/styled-components).
@@ -43,11 +48,42 @@ not defaults to reconsider:
     disk under the data volume.
   - Serving is a plain HTTP endpoint/static file response that returns the
     already-generated file — XMLTV is never generated on-the-fly per request.
-- **Guide refresh:** a background scheduler (in-process, e.g. APScheduler —
-  no external task queue/broker) periodically refreshes cached SD data and
-  regenerates XMLTV files. The UI also exposes a manual "refresh now" action
-  that runs the same pipeline on demand. Refresh interval should be
-  configurable via environment variable.
+- **Guide refresh:** the APScheduler-based scheduler periodically refreshes
+  cached SD data and regenerates XMLTV files. The UI also exposes a manual
+  "refresh now" action that runs the same pipeline on demand. Refresh
+  interval should be configurable via environment variable.
+
+## Backend module layout (separation of concerns)
+
+The backend must keep these concerns in separate modules/packages — no module
+should straddle two of these responsibilities:
+
+- **`sd_client/`** — the *only* place that talks HTTP to SchedulesDirect.
+  A typed client exposing methods like "get token", "list account lineups",
+  "add/remove account lineup", "get lineup stations", "get schedules",
+  "get programs", "get logos". Requests and responses are Pydantic models.
+  This module knows nothing about epg-editor's own domain concepts
+  (epg-editor "lineups", channel mappings) — it's a thin wrapper around SD's
+  JSON API and would be reusable outside this app.
+- **`models/`** — shared Pydantic models: both the app's own domain objects
+  (`Lineup`, `Channel`, `ChannelMapping`, matching `docs/data-model.md`) and
+  the SD request/response schemas used by `sd_client/`. Other modules import
+  from here rather than redefining shapes.
+- **`storage/`** — all reads/writes of `config/lineups.json`,
+  `cache/sd/*`, and `output/*.xml`. Nothing outside this module touches the
+  filesystem under `/data` directly. Responsible for the atomic-write
+  guarantee on `config/lineups.json` (see `docs/data-model.md`).
+- **`services/` (or `domain/`)** — the actual business logic: M3U parsing,
+  mapping-suggestion computation, XMLTV generation. Calls into `sd_client/`
+  and `storage/`; never does its own HTTP or raw file I/O.
+- **`scheduler/`** — APScheduler setup and job definitions. Jobs are thin —
+  they call into `services/` functions rather than embedding logic themselves.
+- **`api/`** — FastAPI routers. Thin HTTP layer that validates
+  input/output via Pydantic and delegates to `services/`. No business logic
+  or direct storage/SD-client calls here either.
+
+Dependency direction: `api/` and `scheduler/` → `services/` → `sd_client/` +
+`storage/` → `models/`. Lower layers never import from higher ones.
 
 ## Core workflows
 
@@ -130,14 +166,29 @@ performance.
   (README included); this project is a general XMLTV source, not a
   Plex/Jellyfin plugin.
 
+## Development environment
+
+A `.devcontainer/` configuration is checked in so development happens inside
+a VS Code dev container with both the Python and Node toolchains available.
+Keep it working as the backend/frontend scaffolding is added — update its
+`postCreateCommand`/features if dependency install steps change.
+
 ## Repository layout (intended — create as implementation proceeds)
 
 ```
 epg-editor/
-├── backend/          # Python (FastAPI) app: SD client, mapping logic, XMLTV generation, scheduler, static file serving
+├── backend/
+│   └── app/
+│       ├── api/          # FastAPI routers
+│       ├── services/     # business logic: mapping, XMLTV generation, M3U parsing
+│       ├── sd_client/    # SchedulesDirect JSON API client
+│       ├── storage/      # JSON config/cache/output file I/O
+│       ├── models/       # Pydantic models (domain + SD schemas)
+│       └── scheduler/    # APScheduler setup and jobs
 ├── frontend/          # React + styled-components app
 ├── docker/            # Dockerfile, entrypoint script
 ├── docs/              # architecture docs (this file links to them)
+├── .devcontainer/     # VS Code dev container config
 ├── docker-compose.example.yml
 ├── README.md
 └── CLAUDE.md
