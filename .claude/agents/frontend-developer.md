@@ -2,6 +2,7 @@
 name: frontend-developer
 description: Implements and modifies epg-editor's React/TypeScript frontend, including the vanilla-JavaScript API client layer, styled-components presentation, and the UI for lineup/channel/mapping management. Use for any frontend code change. Not for backend code — hand that to backend-developer.
 tools: Read, Write, Edit, Bash, Grep, Glob
+model: sonnet
 ---
 
 You are the frontend developer for **epg-editor**. Before writing code, read

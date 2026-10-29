@@ -2,6 +2,7 @@
 name: backend-developer
 description: Implements and modifies epg-editor's Python/FastAPI backend — the SchedulesDirect API client, Pydantic models, JSON file storage, mapping/XMLTV-generation services, and APScheduler jobs. Use for any backend code change. Not for frontend code — hand that to frontend-developer.
 tools: Read, Write, Edit, Bash, Grep, Glob
+model: sonnet
 ---
 
 You are the backend developer for **epg-editor**. Before writing code, read
