@@ -225,6 +225,15 @@ performance.
   (README included); this project is a general XMLTV source, not a
   Plex/Jellyfin plugin.
 
+## Project agents
+
+`.claude/agents/` defines project-local Claude Code agents for working on
+epg-editor: `project-manager` (coordinates the others — use it for anything
+spanning more than one role), `backend-developer`, `frontend-developer`,
+`peer-reviewer` (covers both frontend and backend), and `uat-tester`. Keep
+each one's hard-constraints list in sync with this file if an architecture
+decision changes.
+
 ## Development environment
 
 A `.devcontainer/` configuration is checked in so development happens inside
