@@ -80,6 +80,15 @@ export const Input = styled.input`
   }
 `;
 
+export const FileInput = styled.input`
+  font-size: 14px;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+`;
+
 export const Label = styled.label`
   display: flex;
   flex-direction: column;

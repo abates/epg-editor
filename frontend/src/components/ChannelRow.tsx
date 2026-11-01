@@ -99,6 +99,7 @@ export function ChannelRow({ lineupId, channel, sdLineupIds, onChanged, onRemove
           </Name>
           <Meta>
             {channel.tvgId && <>tvg-id: {channel.tvgId} </>}
+            {channel.group && <>· group: {channel.group} </>}
             {channel.logoUrl && <>· logo: {channel.logoUrl} </>}
             {channel.sourceStreamUrl && <>· stream: {channel.sourceStreamUrl}</>}
           </Meta>

@@ -113,6 +113,30 @@ async function request(path, options = {}) {
 }
 
 /**
+ * Issues a multipart/form-data request (file upload) to the backend and
+ * returns the parsed JSON response body, throwing the same kind of
+ * descriptive Error as `request()` on any non-OK status.
+ *
+ * Deliberately does NOT set a `Content-Type` header - the browser has to
+ * generate the multipart boundary itself for a `FormData` body, and setting
+ * the header manually (even to the right-looking value) breaks that.
+ *
+ * @param {string} path
+ * @param {FormData} formData
+ * @param {string} [method]
+ * @returns {Promise<unknown>}
+ */
+async function requestMultipart(path, formData, method = 'POST') {
+  const response = await fetch(path, { method, body: formData });
+
+  if (!response.ok) {
+    throw await buildResponseError(response, method, path);
+  }
+
+  return response.json();
+}
+
+/**
  * Calls GET /api/lineups.
  *
  * @returns {Promise<unknown[]>} the list of lineups.
@@ -142,6 +166,17 @@ export function createLineup({ name }) {
  */
 export function getLineup(lineupId) {
   return request(`/api/lineups/${encodeURIComponent(lineupId)}`);
+}
+
+/**
+ * Calls DELETE /api/lineups/{lineupId}, permanently removing the lineup
+ * and all of its channels/mappings from `config/lineups.json`.
+ *
+ * @param {string} lineupId
+ * @returns {Promise<null>}
+ */
+export function deleteLineup(lineupId) {
+  return request(`/api/lineups/${encodeURIComponent(lineupId)}`, { method: 'DELETE' });
 }
 
 /**
@@ -272,4 +307,50 @@ export function syncAndGenerate(lineupId) {
   return request(`/api/lineups/${encodeURIComponent(lineupId)}/sync-and-generate`, {
     method: 'POST',
   });
+}
+
+/**
+ * Calls POST /api/lineups/import-m3u (multipart/form-data: `name` + `file`)
+ * to create a brand-new, `m3u`-sourced lineup from an uploaded M3U
+ * playlist. Every parsed entry comes back in `result.added` since the
+ * lineup starts out empty.
+ *
+ * Rejects with the extracted `detail` message for the backend's documented
+ * error cases: 400 (upload too large, or not parseable as M3U at all).
+ *
+ * @param {string} name
+ * @param {File} file
+ * @returns {Promise<{ lineup: unknown, result: { added: unknown[], updated: unknown[], flaggedMissing: unknown[] } }>}
+ */
+export function importM3u(name, file) {
+  const formData = new FormData();
+  formData.append('name', name);
+  formData.append('file', file);
+  return requestMultipart('/api/lineups/import-m3u', formData);
+}
+
+/**
+ * Calls POST /api/lineups/{lineupId}/import-m3u (multipart/form-data: just
+ * `file`) to re-import an uploaded M3U playlist into an existing
+ * `m3u`-sourced lineup, merging by `tvgId` (fallback: channel number) - see
+ * `docs/data-model.md`'s `missingSince` notes for the merge contract.
+ *
+ * The returned `lineup` already reflects the fully-merged, persisted state
+ * - callers don't need to separately `getLineup()` after a successful call.
+ *
+ * Rejects with the extracted `detail` message for the backend's documented
+ * error cases: 404 (lineup doesn't exist), 400 (upload too large, not
+ * parseable as M3U, or the lineup's `source` isn't `"m3u"`).
+ *
+ * @param {string} lineupId
+ * @param {File} file
+ * @returns {Promise<{ lineup: unknown, result: { added: unknown[], updated: unknown[], flaggedMissing: unknown[] } }>}
+ */
+export function reimportM3u(lineupId, file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return requestMultipart(
+    `/api/lineups/${encodeURIComponent(lineupId)}/import-m3u`,
+    formData,
+  );
 }

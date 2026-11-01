@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import styled from 'styled-components';
-import { addChannel, getLineup } from '../api/lineups.js';
+import { addChannel, deleteLineup, getLineup } from '../api/lineups.js';
 import { ChannelFieldsForm } from '../components/ChannelFieldsForm';
 import {
   emptyChannelFieldValues,
@@ -8,11 +8,13 @@ import {
   type ChannelFieldValues,
 } from '../components/channelFormValues';
 import { ChannelRow } from '../components/ChannelRow';
+import { ReimportM3uPanel } from '../components/ReimportM3uPanel';
 import { SdLineupIdsEditor } from '../components/SdLineupIdsEditor';
 import { SyncAndGeneratePanel } from '../components/SyncAndGeneratePanel';
 import type { Channel, Lineup } from '../types';
 import {
   Card,
+  DangerButton,
   ErrorText,
   Page,
   SecondaryButton,
@@ -53,12 +55,16 @@ interface LineupDetailPageProps {
 
 /**
  * Detail view for a single lineup: its SD lineup associations, channel
- * list (with per-channel edit/delete/mapping actions), and a form to add
- * a channel manually. No mapping suggestion/bulk-accept UI yet (Phase 3)
- * - mapping is plain manual entry per the Phase 1 backend contract.
+ * list (with per-channel edit/delete/mapping actions), a form to add a
+ * channel manually, and - for `m3u`-sourced lineups only - a re-import
+ * control (`ReimportM3uPanel`). No mapping suggestion/bulk-accept UI yet
+ * (Phase 3) - mapping is plain manual entry per the Phase 1 backend
+ * contract.
  */
 export function LineupDetailPage({ lineupId, onBack }: LineupDetailPageProps) {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Fetches the lineup and lands it (or any failure) into state, without
   // touching `state` synchronously first - the mount effect below relies
@@ -120,6 +126,39 @@ export function LineupDetailPage({ lineupId, onBack }: LineupDetailPageProps) {
     });
   }
 
+  function handleReimported(lineup: Lineup) {
+    // The response already reflects the fully-merged, persisted lineup
+    // (added/updated/flagged-missing channels all included) - replace the
+    // whole lineup wholesale rather than trying to reconcile it field by
+    // field against the previous state.
+    setState({ status: 'ok', lineup });
+  }
+
+  async function handleDeleteLineup() {
+    if (state.status !== 'ok') {
+      return;
+    }
+    const { lineup } = state;
+    const channelCount = lineup.channels.length;
+    const confirmed = window.confirm(
+      `Delete lineup "${lineup.name}"? This will permanently remove it and all ${channelCount} ` +
+        `channel${channelCount === 1 ? '' : 's'} in it, including any confirmed mappings. ` +
+        'This cannot be undone.',
+    );
+    if (!confirmed) {
+      return;
+    }
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteLineup(lineupId);
+      onBack();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+      setDeleting(false);
+    }
+  }
+
   async function handleAddChannel(values: ChannelFieldValues) {
     const created = (await addChannel(lineupId, toChannelRequestBody(values))) as Channel;
     setState((prev) => {
@@ -136,12 +175,19 @@ export function LineupDetailPage({ lineupId, onBack }: LineupDetailPageProps) {
         <SecondaryButton type="button" onClick={onBack}>
           &larr; Back to lineups
         </SecondaryButton>
+        {state.status === 'ok' && (
+          <DangerButton type="button" disabled={deleting} onClick={handleDeleteLineup}>
+            {deleting ? 'Deleting...' : 'Delete lineup'}
+          </DangerButton>
+        )}
       </BackRow>
 
       {state.status === 'loading' && <p>Loading lineup...</p>}
       {state.status === 'error' && (
         <ErrorText>Failed to load lineup: {state.message}</ErrorText>
       )}
+      {deleteError && <ErrorText>{deleteError}</ErrorText>}
+
       {state.status === 'ok' && (
         <>
           <SectionTitle>{state.lineup.name}</SectionTitle>
@@ -152,6 +198,17 @@ export function LineupDetailPage({ lineupId, onBack }: LineupDetailPageProps) {
 
           <SubsectionTitle>Sync & Generate</SubsectionTitle>
           <SyncAndGeneratePanel lineupId={lineupId} />
+
+          {state.lineup.source === 'm3u' && (
+            <>
+              <SubsectionTitle>Re-import M3U</SubsectionTitle>
+              <ReimportM3uPanel
+                lineupId={lineupId}
+                onImported={handleReimported}
+                onChannelRemoved={handleChannelRemoved}
+              />
+            </>
+          )}
 
           <SubsectionTitle>SchedulesDirect lineups</SubsectionTitle>
           <SdLineupIdsEditor

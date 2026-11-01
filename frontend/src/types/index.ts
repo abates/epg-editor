@@ -42,6 +42,12 @@ export interface Channel {
   name: string;
   logoUrl: string | null;
   tvgId: string | null;
+  /**
+   * From an M3U entry's `group-title` attribute (e.g. "Local", "Sports").
+   * `null` for manually-added channels and for M3U entries that didn't
+   * specify one.
+   */
+  group: string | null;
   sourceStreamUrl: string | null;
   /**
    * Set when an `m3u`-sourced lineup is re-imported and this channel no
@@ -87,4 +93,40 @@ export interface SyncResult {
   channelsGenerated: number;
   stationErrors: StationSyncError[];
   errors: string[];
+}
+
+/**
+ * Outcome of merging parsed M3U entries into an epg-editor lineup, returned
+ * by both `POST /api/lineups/import-m3u` (brand-new lineup) and
+ * `POST /api/lineups/{lineupId}/import-m3u` (re-import into an existing
+ * `m3u`-sourced lineup). Entries are full `Channel` objects, not diffs.
+ *
+ * - `added`: brand-new channels created from unmatched incoming entries.
+ * - `updated`: existing channels whose metadata was refreshed in place
+ *   (their `mapping` is always preserved untouched).
+ * - `flaggedMissing`: channels no longer present in the uploaded file -
+ *   never deleted automatically, just flagged via `Channel.missingSince`.
+ *   Includes channels flagged by a *previous* re-import that are still
+ *   missing now, not just newly-flagged ones.
+ * - `unidentifiedEntryCount`: how many parsed entries in this file had
+ *   neither a `tvg-id` nor a channel number - entries with no stable
+ *   identity signal to match against existing channels on a future
+ *   re-import. This is a known, accepted limitation (not a bug): such an
+ *   entry is always treated as brand-new on every import/re-import, which
+ *   can grow the lineup by a duplicate channel per re-import and flag a
+ *   previously-matched channel as missing as a side effect. Present on
+ *   every import result (descriptive of "what's in this file"), with `0`
+ *   being the normal value when every entry carries an identifier.
+ */
+export interface M3UImportResult {
+  added: Channel[];
+  updated: Channel[];
+  flaggedMissing: Channel[];
+  unidentifiedEntryCount: number;
+}
+
+/** Response body for both M3U import endpoints. */
+export interface M3UImportResponse {
+  lineup: Lineup;
+  result: M3UImportResult;
 }
