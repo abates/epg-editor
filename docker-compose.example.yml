@@ -3,7 +3,7 @@
 
 services:
   epg-editor:
-    image: epg-editor:latest
+    image: ghcr.io/abates/epg-editor:latest
     build: .
     restart: unless-stopped
     ports:

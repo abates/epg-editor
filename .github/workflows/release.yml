@@ -1,0 +1,193 @@
+name: release
+
+# Builds and publishes the single multi-arch Docker image described in
+# CLAUDE.md's "Docker" section to GHCR.
+#
+# Tag-naming rules:
+#   - Pushing a `vM.m.p` tag (the normal release path, via
+#     `scripts/release.sh`) publishes `ghcr.io/abates/epg-editor:vM.m.p`
+#     AND moves `ghcr.io/abates/epg-editor:latest` to the same build.
+#   - Manual `workflow_dispatch` runs publish a one-off
+#     `ghcr.io/abates/epg-editor:v<version>-<short-sha>` tag ONLY — `latest`
+#     is never touched by a manual run.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ghcr.io/abates/epg-editor
+
+jobs:
+  version-check:
+    name: Verify version consistency
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Resolve and verify backend/frontend/tag versions match
+        id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          backend_version="$(python3 -c "
+          import tomllib
+          with open('backend/pyproject.toml', 'rb') as f:
+              data = tomllib.load(f)
+          print(data['project']['version'])
+          ")"
+
+          frontend_version="$(jq -r '.version' frontend/package.json)"
+
+          if [ -z "$backend_version" ] || [ "$backend_version" = "null" ]; then
+            echo "::error::Could not read [project].version from backend/pyproject.toml"
+            exit 1
+          fi
+          if [ -z "$frontend_version" ] || [ "$frontend_version" = "null" ]; then
+            echo "::error::Could not read .version from frontend/package.json"
+            exit 1
+          fi
+
+          echo "backend/pyproject.toml version: $backend_version"
+          echo "frontend/package.json version: $frontend_version"
+
+          if [ "$backend_version" != "$frontend_version" ]; then
+            echo "::error::Version mismatch: backend/pyproject.toml has '$backend_version' but frontend/package.json has '$frontend_version'. These must match (see CLAUDE.md's Docker section) — use scripts/release.sh to bump both together."
+            exit 1
+          fi
+
+          # On the normal release path (a `vM.m.p` tag push), the pushed tag
+          # (minus its leading 'v') must also match the now-verified-matching
+          # file version, so a release can never silently publish a
+          # mismatched image. Keyed off the triggering event, not ref shape,
+          # so a workflow_dispatch run (even one started with a tag selected
+          # as its ref) never hits this branch.
+          if [ "$EVENT_NAME" = "push" ]; then
+            tag_name="$REF_NAME"
+            tag_version="${tag_name#v}"
+            echo "git tag: $tag_name (version portion: $tag_version)"
+            if [ "$tag_version" != "$backend_version" ]; then
+              echo "::error::Tag/version mismatch: pushed tag '$tag_name' implies version '$tag_version', but backend/pyproject.toml + frontend/package.json report '$backend_version'. Refusing to build/publish."
+              exit 1
+            fi
+          fi
+
+          echo "version=$backend_version" >> "$GITHUB_OUTPUT"
+
+  test-backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies and run tests
+        working-directory: backend
+        run: |
+          uv sync --locked
+          uv run pytest
+
+  test-frontend:
+    name: Frontend build and lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install, build, and lint
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          npm run lint
+
+  build-and-push:
+    name: Build and push multi-arch image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    needs:
+      - version-check
+      - test-backend
+      - test-frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          VERSION: ${{ needs.version-check.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          version="$VERSION"
+
+          if [ "$EVENT_NAME" = "push" ]; then
+            # Tag push (the normal release path): publish the exact version
+            # tag and move `latest`. Keyed off the triggering event, not ref
+            # shape, so a workflow_dispatch run started with a tag selected
+            # as its ref never falls into this branch and never moves
+            # `latest`.
+            tags="${IMAGE_NAME}:${REF_NAME}
+          ${IMAGE_NAME}:latest"
+          else
+            # workflow_dispatch: a one-off tag only, `latest` is untouched.
+            short_sha="${GITHUB_SHA:0:7}"
+            tags="${IMAGE_NAME}:v${version}-${short_sha}"
+          fi
+
+          echo "Resolved tags:"
+          echo "$tags"
+
+          {
+            echo "tags<<EOF"
+            echo "$tags"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}

@@ -1,0 +1,37 @@
+.git
+.github
+.devcontainer
+
+# Node / frontend
+frontend/node_modules
+frontend/dist
+frontend/build
+
+# Python / backend
+backend/.venv
+backend/**/__pycache__
+**/__pycache__
+*.pyc
+backend/.pytest_cache
+backend/.mypy_cache
+backend/.ruff_cache
+backend/*.egg-info
+
+# App data (never bake real data into the image)
+data/
+epg-editor-data/
+
+# Editors / OS
+.DS_Store
+.idea
+.vscode
+
+# Local env/config (recursive: also catches backend/.env, frontend/.env.local, etc.)
+**/.env
+**/.env.*
+
+# Scratch/docs not needed in the build context
+docs
+README.md
+CLAUDE.md
+docker-compose.example.yml

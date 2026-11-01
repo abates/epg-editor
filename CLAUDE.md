@@ -272,21 +272,60 @@ performance.
 ## Docker
 
 - Single multi-stage `Dockerfile` **at the repo root** (matches
-  `docker-compose.example.yml`'s `build: .`):
-  1. Node stage runs `npm install` + build to produce the frontend's
-     production static assets.
-  2. Python stage installs backend dependencies with `uv` (from
-     `backend/pyproject.toml` + `uv.lock`), copies the backend source and the
-     built frontend assets, and runs the single server process.
-- An entrypoint script (if needed, e.g. to ensure `/data/{config,cache,output}`
-  exist before the app starts) lives at `docker/entrypoint.sh` and is `COPY`'d
-  into the image by the root `Dockerfile` — only the `Dockerfile` itself must
-  be at the root.
+  `docker-compose.example.yml`'s `build: .`) — this now exists, at
+  [`Dockerfile`](Dockerfile):
+  1. Node stage (`frontend-build`) runs `npm ci` + `npm run build` to produce
+     the frontend's production static assets (`frontend/dist`).
+  2. Python stage (`backend`) installs backend dependencies with `uv`
+     (`uv sync --frozen --no-dev`, from `backend/pyproject.toml` + `uv.lock`),
+     copies the backend source, and copies the built frontend assets in at
+     `/app/frontend/dist`. **Real-world addition (found during release-
+     tooling work, not pre-specified):** `app/main.py` does not yet mount
+     those frontend assets anywhere (no `StaticFiles`/SPA-fallback route) —
+     the Dockerfile stages the artifact at a path ready for that wiring, but
+     nothing serves it yet. That wiring is a separate, still-open backend
+     task. The image's `CMD` runs `uv run --no-sync uvicorn app.main:app
+     --host 0.0.0.0 --port 8080`; the `--no-sync` matters because a bare
+     `uv run` re-syncs (and pulls in the dev dependency group, over the
+     network) on every container start otherwise.
+- An entrypoint script lives at [`docker/entrypoint.sh`](docker/entrypoint.sh)
+  and is `COPY`'d into the image by the root `Dockerfile` — only the
+  `Dockerfile` itself must be at the root. It `mkdir -p`s
+  `{config,cache,output}` under the data dir (honoring `EPG_EDITOR_DATA_DIR`,
+  defaulting to `/data`) before `exec`ing the `CMD`, as belt-and-suspenders
+  alongside `app.storage.ensure_data_dirs()`, which the FastAPI lifespan
+  already calls on startup.
 - Provide a `docker-compose.example.yml` showing the volume mount for `/data`
   and the required SD credential environment variables. Keep it client-neutral
   — do not add Plex- or Jellyfin-specific setup steps anywhere in the repo
   (README included); this project is a general XMLTV source, not a
   Plex/Jellyfin plugin.
+
+### Release publishing and versioning (added during release-tooling work)
+
+- **Version source of truth:** `backend/pyproject.toml`'s `[project].version`
+  is authoritative. `frontend/package.json`'s `"version"` must always match
+  it exactly — CI (`version-check` job in
+  [`.github/workflows/release.yml`](.github/workflows/release.yml)) fails the
+  build if they drift apart, or if a pushed `vX.Y.Z` tag doesn't match the
+  (matching) file version.
+- **`scripts/release.sh patch|minor|major`** is the only sanctioned way to
+  bump the version, commit, tag, and push a release — it bumps both files
+  together and regenerates `backend/uv.lock` and `frontend/package-lock.json`
+  in the same commit so the lockfiles track the new version too, refuses to
+  run on a dirty working tree, and refuses to "fix" a version mismatch
+  silently (that's treated as a sign something bypassed the script). See
+  [`scripts/release.sh`](scripts/release.sh) and the README's "Releasing"
+  section.
+- **Publishing:** pushing a `vX.Y.Z` tag (what `scripts/release.sh` does)
+  triggers [`.github/workflows/release.yml`](.github/workflows/release.yml),
+  which builds the `Dockerfile` for `linux/amd64` + `linux/arm64` and pushes
+  it to `ghcr.io/abates/epg-editor`. Tag-naming rules:
+  - A tag push (`vX.Y.Z`) publishes `ghcr.io/abates/epg-editor:vX.Y.Z`
+    **and** moves `ghcr.io/abates/epg-editor:latest` to the same build.
+  - A manual `workflow_dispatch` run publishes only
+    `ghcr.io/abates/epg-editor:v<version>-<short-sha>` — it never touches
+    `latest`.
 
 ## Project agents
 
@@ -324,6 +363,11 @@ epg-editor/
 │       └── types/        # shared TypeScript types
 ├── docker/
 │   └── entrypoint.sh  # copied into the image by the root Dockerfile
+├── scripts/
+│   └── release.sh     # version bump + tag + push; triggers the release workflow
+├── .github/
+│   └── workflows/
+│       └── release.yml  # builds/publishes the Docker image to GHCR on tag push
 ├── docs/              # architecture docs (this file links to them)
 ├── .devcontainer/     # VS Code dev container config
 ├── Dockerfile

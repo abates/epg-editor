@@ -36,6 +36,25 @@ if `--port` is omitted, so don't drop that flag in dev.
 
 Frontend (Vite + npm) — see [`frontend/README.md`](frontend/README.md).
 
+## Releasing
+
+`./scripts/release.sh patch|minor|major` is the one-command way to cut a
+release. Run it from a clean working tree on the branch you want to release
+from. It will:
+
+1. Bump the version (`backend/pyproject.toml` and `frontend/package.json`,
+   which are kept in lockstep) according to the given semver component.
+2. Commit that bump (`Release vX.Y.Z`) and create an annotated `vX.Y.Z` tag.
+3. Push the branch and the tag to `origin`.
+
+Pushing the tag triggers `.github/workflows/release.yml`, which runs the
+backend/frontend test suites and, if they pass, builds and publishes a
+multi-arch (`linux/amd64`/`linux/arm64`) image to
+`ghcr.io/abates/epg-editor:vX.Y.Z` (also moving the `:latest` tag). The same
+workflow can be run manually via `workflow_dispatch` for a one-off build
+(tagged `vX.Y.Z-<shortsha>`, without touching `:latest`), e.g. to test a
+change before cutting an official release.
+
 ## Configuration
 
 | Variable | Required | Description |
