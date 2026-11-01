@@ -10,7 +10,7 @@ persisted state.
 Kept in `services/` (rather than called directly from `api/sd_account.py`)
 to preserve CLAUDE.md's one-directional module layering
 (`api/` -> `services/` -> `sd_client/`), the same pattern already
-established by `services/sync.py` and `services/suggestions.py` — even
+established by `services/refresh.py` and `services/suggestions.py` — even
 though each function here is a thin, mostly line-for-line wrapper around a
 single `SdClient` call.
 """

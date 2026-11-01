@@ -16,8 +16,9 @@ below for the exact scoring function/threshold and the reasoning for each.
 Depends only on `sd_client/` + `storage/` + `services.lineups` (for
 `NotFoundError`/`get_lineup`), never raw HTTP or raw file I/O itself, per
 CLAUDE.md's module layering. Callers supply an already-constructed
-`SdClient` (same dependency-injection pattern as `services/sync.py`), so
-this stays testable with `httpx.MockTransport` and zero real credentials.
+`SdClient` (same dependency-injection pattern as `services/refresh.py`),
+so this stays testable with `httpx.MockTransport` and zero real
+credentials.
 """
 
 from __future__ import annotations
@@ -185,7 +186,7 @@ async def _ensure_lineup_stations_cached(
 
     First real caller of `storage.sd_cache.save_lineup_stations` — Phase 1/5
     built the cache file shape (`CachedLineupStations`) but nothing had
-    populated it yet (`services/sync.py` only ever fetches schedules/
+    populated it yet (`services/refresh.py` only ever fetches schedules/
     programs for already-known station ids, never a lineup's station
     *list*). Respects "no speculative bulk-fetching": only called for SD
     lineup ids actually associated with the epg-editor lineup being scored
@@ -251,10 +252,10 @@ async def generate_suggestions(
     Raises `services.lineups.NotFoundError` if no such lineup exists.
     Raises `sd_client.client.SdClientError` (uncaught, not collected) if
     fetching any associated SD lineup's station roster fails — unlike
-    `services/sync.py`'s per-station error collection, there's no partial
-    result that makes sense here: a lineup missing part of its candidate
-    pool would silently produce worse/incomplete suggestions for every
-    channel rather than a clearly-failed run, so this surfaces the failure
+    `services/refresh.py`'s per-station error collection, there's no
+    partial result that makes sense here: a lineup missing part of its
+    candidate pool would silently produce worse/incomplete suggestions for
+    every channel rather than a clearly-failed run, so this surfaces the failure
     immediately for the caller (the API route) to map to a clean 502.
     """
     lineup = get_lineup(lineup_id)

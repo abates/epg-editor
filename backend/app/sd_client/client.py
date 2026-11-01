@@ -22,7 +22,7 @@ wrapped (`_decode_json()` / `_validate()`) so a malformed/non-JSON body or a
 response that doesn't match the expected shape also comes out as
 `SdClientError` rather than a raw `json.JSONDecodeError` or
 `pydantic.ValidationError` escaping to callers. This matters because
-`services/sync.py` only catches `SdClientError` per-station — anything else
+`services/refresh.py` only catches `SdClientError` per-station — anything else
 would abort the whole sync instead of being recorded against just that
 station.
 """
@@ -42,6 +42,7 @@ from app.models.sd import (
     SdAddRemoveLineupResponse,
     SdLineupStationsResponse,
     SdProgram,
+    SdScheduleMd5Response,
     SdScheduleRequest,
     SdStationSchedule,
     SdStatusResponse,
@@ -68,6 +69,12 @@ DEFAULT_HTTP_TIMEOUT: float = 30.0
 #: token, blocked account, etc.) rather than a problem specific to one
 #: station's data.
 _AUTH_HTTP_STATUSES = frozenset({401, 403})
+
+#: SD's documented hard cap on `programID`s per `POST /programs` request.
+#: `get_programs` chunks internally so callers (`services/refresh.py`) can
+#: pass however many program IDs the guide window actually needs without
+#: needing to know about this SD-specific limit themselves.
+PROGRAMS_REQUEST_CHUNK_SIZE = 5000
 
 #: SD's documented error "code" family for token/account-level problems
 #: (e.g. TOKEN_MISSING, TOKEN_EXPIRED, ACCOUNT_EXPIRED, ACCOUNT_DISABLED,
@@ -105,7 +112,7 @@ class SdClientError(Exception):
     def is_auth_error(self) -> bool:
         """Whether this looks like an auth/account-wide failure.
 
-        Used by `services/sync.py` to distinguish "the whole account/token
+        Used by `services/refresh.py` to distinguish "the whole account/token
         is broken, stop burning SD calls and surface this clearly" from "this
         one station's data had a problem, record it and move on to the next
         station." See `_AUTH_HTTP_STATUSES`/`_AUTH_SD_CODE_RANGE` above for
@@ -122,8 +129,8 @@ class SdCredentialsNotConfiguredError(SdClientError):
     """Raised by `SdClient.from_env()` when credentials aren't set.
 
     A distinct, specific subclass of `SdClientError` (rather than that
-    generic base, or a bare crash) so a caller like the
-    `sync-and-generate` API route can map *this* case to a clean,
+    generic base, or a bare crash) so a caller like `api/dependencies.py`'s
+    `get_sd_client` FastAPI dependency can map *this* case to a clean,
     unambiguous 4xx (e.g. 503 "SchedulesDirect credentials are not
     configured") instead of a confusing 500 — while code that only cares
     about "something about SD failed" can still catch `SdClientError`
@@ -173,7 +180,7 @@ class SdClient:
         Raises `SdCredentialsNotConfiguredError` immediately if either is
         missing/empty, rather than deferring to a lazy, harder-to-diagnose
         failure the first time `get_token()` happens to be called — callers
-        (the `sync-and-generate` API route) turn that into a clean 4xx.
+        (`api/dependencies.py`'s `get_sd_client`) turn that into a clean 4xx.
 
         `http_client` defaults to a fresh `httpx.AsyncClient(timeout=timeout)`
         (the real network) if not supplied. This is the one and only place
@@ -186,9 +193,10 @@ class SdClient:
         enough to construct one at all.
 
         `timeout` is only used when `http_client` isn't supplied — it exists
-        so callers (e.g. `api/sync.py`'s FastAPI dependency) can get a fully
-        configured, ready-to-use `SdClient` back without ever importing or
-        constructing `httpx.AsyncClient` themselves. Use the returned
+        so callers (e.g. `api/dependencies.py`'s `get_sd_client` FastAPI
+        dependency) can get a fully configured, ready-to-use `SdClient`
+        back without ever importing or constructing `httpx.AsyncClient`
+        themselves. Use the returned
         client as an async context manager (`async with`) or call
         `aclose()` explicitly when done, so the underlying connection pool
         is cleaned up.
@@ -329,11 +337,26 @@ class SdClient:
         return parsed
 
     async def get_lineup_stations(self, lineup_id: str) -> SdLineupStationsResponse:
-        """`GET /lineups/{lineupID}` — a lineup's station roster (candidate pool)."""
+        """`GET /lineups/{lineupID}` — a lineup's station roster (candidate pool).
+
+        Like `list_account_lineups`/`get_account_status`, SD can return HTTP
+        200 with an error-coded body (e.g. `{"code": 2100, "response":
+        "LINEUP_NOT_FOUND"}`) — every field on `SdLineupStationsResponse` is
+        optional, so that would otherwise validate as an empty-but-successful
+        roster instead of raising. Explicitly check `code` so that case
+        surfaces as an `SdClientError` instead (reviewer finding: a good
+        cached roster must not get silently overwritten with an empty one).
+        """
         response = await self._request(
             "GET", f"{self._base_url}/lineups/{lineup_id}", headers=await self._auth_headers()
         )
-        return self._validate(SdLineupStationsResponse, self._decode_json(response))
+        parsed = self._validate(SdLineupStationsResponse, self._decode_json(response))
+        if parsed.code not in (0, None):
+            raise SdClientError(
+                parsed.message or parsed.response or "SD lineup stations request failed",
+                sd_code=parsed.code,
+            )
+        return parsed
 
     async def get_schedules(
         self, requests: list[SdScheduleRequest]
@@ -353,7 +376,7 @@ class SdClient:
         on the unexpected shape. A per-station/day *item* reporting its own
         non-zero `code` (e.g. 7100 SCHEDULE_QUEUED — the schedule isn't
         ready yet) is a data-quality problem, not a transport/shape one, so
-        it's intentionally left for `services/sync.py` to inspect via
+        it's intentionally left for `services/refresh.py` to inspect via
         `SdStationSchedule.code` rather than raised here.
         """
         body = [item.model_dump(exclude_none=True) for item in requests]
@@ -364,21 +387,73 @@ class SdClient:
         self._raise_for_top_level_sd_error(data)
         return [self._validate(SdStationSchedule, item) for item in data]
 
+    async def get_schedule_md5s(
+        self, requests: list[SdScheduleRequest]
+    ) -> SdScheduleMd5Response:
+        """`POST /schedules/md5` — per-station/day md5 + lastModified only.
+
+        The same request body shape as `get_schedules` (an array of
+        `{stationID, date[]}`), but a much lighter response: no program
+        data, just an md5/lastModified per station/day so a caller can
+        decide whether a full `get_schedules` re-fetch is actually needed —
+        this is the mechanism docs/backlog.md item 29 calls for ("skip
+        unchanged schedules"), used by `services/refresh.py`.
+
+        Per SD's docs (verified during Phase 5 implementation — see
+        `SdScheduleMd5Response`'s docstring), the response is a JSON object
+        keyed by `stationID` then `date`, not an array — unlike
+        `get_schedules`/`get_programs`. SD's "single error object instead
+        of the expected shape" account-wide-failure pattern still applies
+        (e.g. a revoked token discovered mid-batch), so this still routes
+        through `_raise_for_top_level_sd_error` before validation. SD
+        documents a hard cap of 5000 stationIDs per request; callers are
+        responsible for chunking if they might exceed that (see
+        `services/refresh.py`'s equivalent un-chunked `get_programs` call for
+        the precedent of deferring that until a real lineup is large enough
+        to hit it).
+        """
+        body = [item.model_dump(exclude_none=True) for item in requests]
+        response = await self._request(
+            "POST",
+            f"{self._base_url}/schedules/md5",
+            json=body,
+            headers=await self._auth_headers(),
+        )
+        data = self._decode_json(response)
+        self._raise_for_top_level_sd_error(data)
+        return self._validate(SdScheduleMd5Response, data)
+
     async def get_programs(self, program_ids: list[str]) -> list[SdProgram]:
         """`POST /programs` — batched program metadata lookup by program ID.
 
         See `get_schedules`'s docstring: the same "single error object
         instead of the expected array" possibility applies here too.
+
+        SD documents a hard cap of `PROGRAMS_REQUEST_CHUNK_SIZE` program IDs
+        per request; a caller like `services/refresh.py` can end up with far
+        more than that across every mapped station's guide window on a large
+        real account, so this chunks internally (one `POST /programs` call
+        per `PROGRAMS_REQUEST_CHUNK_SIZE`-sized slice of `program_ids`,
+        results concatenated) rather than pushing that SD-specific limit up
+        onto callers — unlike `get_schedule_md5s`, which currently still
+        defers chunking to its caller (see that method's docstring); this
+        one makes the cleaner call to own it here since there's no
+        meaningful "partial batch" request shape a caller would want control
+        over.
         """
-        response = await self._request(
-            "POST",
-            f"{self._base_url}/programs",
-            json=program_ids,
-            headers=await self._auth_headers(),
-        )
-        data = self._decode_json(response)
-        self._raise_for_top_level_sd_error(data)
-        return [self._validate(SdProgram, item) for item in data]
+        programs: list[SdProgram] = []
+        for start in range(0, len(program_ids), PROGRAMS_REQUEST_CHUNK_SIZE):
+            chunk = program_ids[start : start + PROGRAMS_REQUEST_CHUNK_SIZE]
+            response = await self._request(
+                "POST",
+                f"{self._base_url}/programs",
+                json=chunk,
+                headers=await self._auth_headers(),
+            )
+            data = self._decode_json(response)
+            self._raise_for_top_level_sd_error(data)
+            programs.extend(self._validate(SdProgram, item) for item in data)
+        return programs
 
     async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         """Perform one HTTP request, translating failures into `SdClientError`.
@@ -388,7 +463,7 @@ class SdClient:
         (`httpx.ConnectError`), protocol errors, etc. — so a transport-level
         failure comes out the same way a non-2xx HTTP response already did
         (`_raise_for_http_error`, called here too): as an `SdClientError`.
-        This matters because `services/sync.py` only catches `SdClientError`
+        This matters because `services/refresh.py` only catches `SdClientError`
         per-station; an uncaught `httpx.HTTPError` would otherwise abort the
         entire sync instead of being recorded against just that station.
         """
@@ -420,7 +495,7 @@ class SdClient:
 
         Wraps `pydantic.ValidationError` (e.g. SD's response shape not
         matching what we modeled) into `SdClientError` for the same reason
-        as `_decode_json`/`_request`: so `services/sync.py`'s per-station
+        as `_decode_json`/`_request`: so `services/refresh.py`'s per-station
         `except SdClientError` actually catches it.
         """
         try:

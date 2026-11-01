@@ -285,6 +285,28 @@ def test_get_lineup_stations():
     assert result.map[0].channel == "7.1"
 
 
+def test_get_lineup_stations_raises_on_sd_error_code():
+    """Same scenario as `list_account_lineups`/`get_account_status`'s
+    error-coded-200 tests, reproduced against `/lineups/{lineupID}`: an
+    error body like `{"code": 2100, "response": "LINEUP_NOT_FOUND"}` must
+    raise, not validate as a real-but-empty station roster — every field on
+    `SdLineupStationsResponse` is optional so it would otherwise pass
+    validation silently as `map=[], stations=[]`."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        assert request.url.path.endswith("/lineups/USA-OTA12345")
+        return httpx.Response(200, json={"code": 2100, "response": "LINEUP_NOT_FOUND"})
+
+    client = make_client(handler)
+
+    with pytest.raises(SdClientError) as excinfo:
+        run(client.get_lineup_stations("USA-OTA12345"))
+
+    assert excinfo.value.sd_code == 2100
+
+
 def test_get_schedules_and_get_programs():
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/token"):
@@ -336,6 +358,47 @@ def test_get_schedules_and_get_programs():
     assert schedules[0].stationID == "10123"
     assert schedules[0].programs[0].programID == "EP01234560001"
     assert programs[0].titles[0].title120 == "Nightly News"
+
+
+def test_get_programs_chunks_requests_at_sd_cap():
+    """Regression test (Finding 1's compounding issue): `get_programs` must
+    never send more than `PROGRAMS_REQUEST_CHUNK_SIZE` IDs in a single
+    `/programs` request — SD documents a hard cap of 5000 — splitting a
+    larger request into multiple calls and concatenating the results."""
+    from app.sd_client.client import PROGRAMS_REQUEST_CHUNK_SIZE
+
+    program_ids = [f"EP{i:011d}" for i in range(PROGRAMS_REQUEST_CHUNK_SIZE + 3)]
+    seen_chunk_sizes: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        assert request.url.path.endswith("/programs")
+        import json as json_module
+
+        body = json_module.loads(request.read())
+        seen_chunk_sizes.append(len(body))
+        return httpx.Response(
+            200,
+            json=[{"programID": pid, "titles": []} for pid in body],
+        )
+
+    client = make_client(handler)
+    programs = run(client.get_programs(program_ids))
+
+    assert seen_chunk_sizes == [PROGRAMS_REQUEST_CHUNK_SIZE, 3]
+    assert len(programs) == len(program_ids)
+    assert {p.programID for p in programs} == set(program_ids)
+
+
+def test_get_programs_with_empty_list_makes_no_request():
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover
+        raise AssertionError("must not call SD for an empty program ID list")
+
+    client = make_client(handler)
+    programs = run(client.get_programs([]))
+
+    assert programs == []
 
 
 def test_from_env_raises_specific_error_when_credentials_missing(monkeypatch):
@@ -400,9 +463,9 @@ def test_non_200_response_raises_sd_client_error():
 
 # --- Transport-level failures are wrapped, not left to escape raw ----------
 # (These reproduce the peer-review probe: a timeout/connection error talking
-# to SD must come out as `SdClientError` so `services/sync.py`'s per-station
-# `except SdClientError` actually catches it instead of a raw httpx
-# exception aborting the whole sync.)
+# to SD must come out as `SdClientError` so `services/refresh.py`'s
+# per-station `except SdClientError` actually catches it instead of a raw
+# httpx exception aborting the whole refresh.)
 
 
 def test_transport_timeout_is_wrapped_as_sd_client_error():
@@ -501,6 +564,147 @@ def test_is_auth_error_true_for_account_sd_code_range():
 def test_is_auth_error_false_for_ordinary_data_error():
     err = SdClientError("boom", status_code=400)
     assert not err.is_auth_error
+
+
+# --- `get_schedule_md5s` (POST /schedules/md5) -----------------------------
+
+
+def test_get_schedule_md5s():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        assert request.url.path.endswith("/schedules/md5")
+        assert request.headers["token"] == FAKE_TOKEN
+        return httpx.Response(
+            200,
+            json={
+                "10123": {
+                    "2026-10-29": {
+                        "code": 0,
+                        "message": "OK",
+                        "lastModified": "2026-10-29T15:54:58Z",
+                        "md5": "90OhzuWDRZ/3pDA8kiD/3Q",
+                    },
+                    "2026-10-30": {
+                        "code": 0,
+                        "message": "OK",
+                        "lastModified": "2026-10-29T15:54:58Z",
+                        "md5": "SpVOfFY4a8gQrrZjOqyK8g",
+                    },
+                }
+            },
+        )
+
+    from app.models.sd import SdScheduleRequest
+
+    client = make_client(handler)
+    result = run(
+        client.get_schedule_md5s(
+            [SdScheduleRequest(stationID="10123", date=["2026-10-29", "2026-10-30"])]
+        )
+    )
+
+    assert result.for_station("10123")["2026-10-29"].md5 == "90OhzuWDRZ/3pDA8kiD/3Q"
+    assert result.for_station("10123")["2026-10-30"].md5 == "SpVOfFY4a8gQrrZjOqyK8g"
+    assert result.for_station("missing-station") == {}
+
+
+def test_get_schedule_md5s_top_level_sd_error_is_wrapped():
+    """Same account-wide-failure pattern as `get_schedules`/`get_programs`:
+    a single error object instead of the expected stationID-keyed dict."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        if request.url.path.endswith("/schedules/md5"):
+            return httpx.Response(200, json={"code": 4003, "response": "ACCOUNT_LOCKOUT"})
+        raise AssertionError(f"unexpected path {request.url.path}")
+
+    from app.models.sd import SdScheduleRequest
+
+    client = make_client(handler)
+
+    with pytest.raises(SdClientError) as excinfo:
+        run(
+            client.get_schedule_md5s(
+                [SdScheduleRequest(stationID="10123", date=["2026-10-29"])]
+            )
+        )
+
+    assert excinfo.value.sd_code == 4003
+    assert excinfo.value.is_auth_error
+
+
+def test_get_schedule_md5s_malformed_station_entry_does_not_fail_whole_batch():
+    """Regression test (Finding 3): one station reported in a flatter,
+    unexpected shape (e.g. a per-station error object instead of the
+    expected per-date dict) must not fail validation for the entire
+    response — only that one station's entry should come back empty
+    (`for_station` -> `{}`, the same as "SD didn't mention this station"),
+    while a well-formed sibling station's entry still parses normally."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        return httpx.Response(
+            200,
+            json={
+                "10123": {
+                    "2026-10-29": {"code": 0, "md5": "good-md5"},
+                },
+                # Malformed: a flat per-station error object instead of the
+                # expected per-date dict shape.
+                "99999": {"code": 2201, "response": "STATION_NOT_FOUND"},
+            },
+        )
+
+    from app.models.sd import SdScheduleRequest
+
+    client = make_client(handler)
+    result = run(
+        client.get_schedule_md5s(
+            [
+                SdScheduleRequest(stationID="10123", date=["2026-10-29"]),
+                SdScheduleRequest(stationID="99999", date=["2026-10-29"]),
+            ]
+        )
+    )
+
+    assert result.for_station("10123")["2026-10-29"].md5 == "good-md5"
+    assert result.for_station("99999") == {}
+
+
+def test_get_schedule_md5s_per_date_error_code_is_preserved():
+    """A per-date entry can carry its own non-zero `code` (e.g. the same
+    7020 SCHEDULE_RANGE_EXCEEDED family `get_schedules` can report) — this
+    must not raise, so callers can inspect `code` themselves."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        return httpx.Response(
+            200,
+            json={
+                "10123": {
+                    "2026-10-29": {
+                        "code": 7020,
+                        "response": "SCHEDULE_RANGE_EXCEEDED",
+                        "message": "Date requested not within range.",
+                    }
+                }
+            },
+        )
+
+    from app.models.sd import SdScheduleRequest
+
+    client = make_client(handler)
+    result = run(
+        client.get_schedule_md5s([SdScheduleRequest(stationID="10123", date=["2026-10-29"])])
+    )
+
+    entry = result.for_station("10123")["2026-10-29"]
+    assert entry.code == 7020
+    assert entry.md5 is None
 
 
 # --- `from_env()` owns the real client's timeout config ---------------------

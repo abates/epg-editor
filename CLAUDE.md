@@ -59,10 +59,35 @@ not defaults to reconsider:
     disk under the data volume.
   - Serving is a plain HTTP endpoint/static file response that returns the
     already-generated file — XMLTV is never generated on-the-fly per request.
-- **Guide refresh:** the APScheduler-based scheduler periodically refreshes
-  cached SD data and regenerates XMLTV files. The UI also exposes a manual
-  "refresh now" action that runs the same pipeline on demand. Refresh
-  interval should be configurable via environment variable.
+- **Guide refresh:** the APScheduler-based scheduler (`backend/app/scheduler/jobs.py`)
+  periodically runs `backend/app/services/refresh.py`'s `refresh_all_lineups`
+  across *every* epg-editor lineup, refreshing cached SD data (skipping
+  unchanged schedules via SD's md5 hashes) and regenerating every lineup's
+  XMLTV file. The UI's manual "refresh now" action (`POST /api/refresh-now`)
+  calls the exact same function independently — it does not reset or
+  otherwise touch the scheduled job's own timer. This is the *only*
+  sync/generate mechanism in the app: an earlier Phase 1 stopgap,
+  `POST /api/lineups/{lineup_id}/sync-and-generate` (scoped to one lineup,
+  intentionally with no md5-skip optimization), was fully replaced and
+  removed once this global pipeline existed — see docs/backlog.md item 29.
+  - **Refresh interval**: `EPG_EDITOR_REFRESH_INTERVAL`, a number of
+    **hours** (deliberately no `_HOURS` suffix on the name itself — the
+    unit is documented in prose everywhere this var is referenced).
+    Defaults to **12** hours. Clamped up to a 1-hour floor if configured
+    lower, per SchedulesDirect's own documented request not to sync more
+    than once an hour (see docs/schedulesdirect-integration.md).
+  - **Station roster refresh**: no separate tunable interval. Each refresh
+    cycle calls SD's `/status` endpoint (needed for other reasons too) and
+    compares each associated SD lineup's `modified` timestamp against what
+    `storage/sd_cache.py`'s `CachedLineupStations.modified` has cached,
+    re-fetching that lineup's roster only when SD's value is newer. A
+    30-day fallback TTL (`services/refresh.py`'s `STATION_ROSTER_TTL`, a
+    backend constant, not user-configurable) forces a re-fetch regardless
+    of `modified` if the cached roster is older than that.
+  - **Schedule/program refresh**: uses `SdClient.get_schedule_md5s`
+    (`POST /schedules/md5`) to skip a full schedule re-fetch for any
+    station/day whose md5 hasn't changed since what's cached — the actual
+    mechanism behind "cache aggressively, use SD's md5 hashes" above.
 
 ## Backend module layout (separation of concerns)
 
@@ -312,4 +337,6 @@ epg-editor/
 - Exact fuzzy-matching library/threshold for mapping suggestions.
 - Whether `config/lineups.json` becomes multiple files (one per lineup) once
   real usage shows a single file is unwieldy — not a reason to add a database.
-- Exact refresh interval default and its env var name.
+- ~~Exact refresh interval default and its env var name.~~ Decided (Phase 5,
+  item 31): `EPG_EDITOR_REFRESH_INTERVAL`, default 12 hours, 1-hour floor —
+  see "Guide refresh" above.

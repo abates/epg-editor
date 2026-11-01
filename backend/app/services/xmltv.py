@@ -48,10 +48,10 @@ GENERATOR_INFO_NAME = "epg-editor"
 def guide_window_dates(now: datetime, days: int) -> list[str]:
     """Return `days` consecutive "YYYY-MM-DD" date strings starting at `now`.
 
-    Public (not `_`-prefixed) because `services/sync.py` needs to request
-    SD schedules for the *exact same* date window generation will later
-    read back out of the cache — keeping both callers on one definition
-    avoids them silently drifting apart.
+    Public (not `_`-prefixed) because `services/refresh.py` needs to
+    request SD schedules for the *exact same* date window generation will
+    later read back out of the cache — keeping both callers on one
+    definition avoids them silently drifting apart.
     """
     start_date = now.date()
     return [(start_date + timedelta(days=offset)).isoformat() for offset in range(days)]
@@ -100,10 +100,10 @@ def confirmed_mapped_channels(lineup: Lineup) -> list[Channel]:
     the user's channel list, not a reason to fail the whole lineup's guide
     generation (fixing it in the UI is out of scope for now).
 
-    Public (not `_`-prefixed): `services/sync.py` reuses this exact
-    filtering/dedup logic to decide which SD stations to sync, rather than
-    duplicating it — see CLAUDE.md's instruction to share, not copy, this
-    helper.
+    Public (not `_`-prefixed): `services/refresh.py` reuses this exact
+    filtering/dedup logic to decide which SD stations to refresh, rather
+    than duplicating it — see CLAUDE.md's instruction to share, not copy,
+    this helper.
     """
     candidates = [
         channel

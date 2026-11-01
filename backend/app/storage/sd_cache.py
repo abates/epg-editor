@@ -58,13 +58,23 @@ def save_lineup_stations(
     sd_lineup_id: str,
     data: SdLineupStationsResponse,
     *,
+    modified: datetime | None = None,
     fetched_at: datetime | None = None,
     base_dir: Path | None = None,
 ) -> CachedLineupStations:
-    """Cache a SD lineup's station roster. Returns the cache entry written."""
+    """Cache a SD lineup's station roster. Returns the cache entry written.
+
+    `modified` should be SD's own `GET /status` `lineups[].modified` value
+    for this SD lineup at fetch time, when the caller has one on hand (see
+    `services/refresh.py`) — see `CachedLineupStations.modified`'s
+    docstring. Defaults to `None` for callers that don't (e.g.
+    `services/suggestions.py`'s cache-miss-only fetch), which the refresh
+    job treats as "unknown, refetch to be safe."
+    """
     entry = CachedLineupStations(
         fetchedAt=fetched_at or datetime.now(timezone.utc),
         sdLineupId=sd_lineup_id,
+        modified=modified,
         data=data,
     )
     atomic_write_text(
@@ -176,11 +186,23 @@ def save_program(
     program_id: str,
     data: SdProgram,
     *,
+    schedule_md5: str | None = None,
     fetched_at: datetime | None = None,
     base_dir: Path | None = None,
 ) -> CachedProgram:
-    """Cache one program's metadata."""
-    entry = CachedProgram(fetchedAt=fetched_at or datetime.now(timezone.utc), data=data)
+    """Cache one program's metadata.
+
+    `schedule_md5` is the per-airing `SdScheduleProgram.md5` this program
+    was fetched on behalf of (see `CachedProgram.scheduleMd5`'s docstring) —
+    callers (`services/refresh.py`) pass it so a later run can tell whether
+    this program needs re-fetching without depending on that schedule day's
+    own md5 having changed.
+    """
+    entry = CachedProgram(
+        fetchedAt=fetched_at or datetime.now(timezone.utc),
+        data=data,
+        scheduleMd5=schedule_md5,
+    )
     atomic_write_text(_program_path(program_id, base_dir), entry.model_dump_json(indent=2))
     return entry
 

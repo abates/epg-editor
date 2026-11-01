@@ -161,13 +161,106 @@ performed by Andrew against his real account.
     list on first fetch with no TTL/expiry of its own, by design (that
     staleness problem was flagged during Phase 3 review as squarely this
     phase's job, same as schedule/program refresh, not something to
-    solve ad hoc in item 21).
+    solve ad hoc in item 21). Done: `scheduler/jobs.py`'s
+    `AsyncIOScheduler` job (chosen over `BackgroundScheduler` because the
+    job body is a coroutine awaiting `SdClient`'s async HTTP calls, so it
+    needs uvicorn's own event loop, not a thread-pool-based one) running
+    `services/refresh.py`'s `refresh_all_lineups` on an interval — see item
+    31 for the interval itself. The job is thin, calling straight into
+    `services/refresh.py`; all the actual logic (md5-based schedule skip,
+    station-roster refresh, error isolation) lives there. Wired into
+    `app.main`'s `lifespan` (started on app startup, shut down on app
+    shutdown), stored on `app.state.scheduler`.
+
+    Scope explicitly includes refreshing cached SD lineup station rosters
+    (`storage/sd_cache.py`) — Phase 3's suggestion-generation service
+    (item 21) caches a lineup's station list on first fetch with no
+    TTL/expiry of its own, by design; that staleness problem is resolved
+    here, not ad hoc in item 21. Mechanism: `GET /status` is called once
+    per refresh cycle (needed for schedule refresh too); each associated
+    SD lineup's `modified` timestamp from that response is compared against
+    `CachedLineupStations.modified` (now persisted alongside `fetchedAt`),
+    and the roster is only re-fetched if SD's value is newer. A 30-day
+    fallback TTL (`services/refresh.py`'s `STATION_ROSTER_TTL`, a fixed
+    backend constant, not user-configurable) forces a re-fetch regardless
+    of `modified` once a cached roster is that old.
+
+    Schedule refresh uses the "skip unchanged schedules" mechanism quite
+    literally: a new `SdClient.get_schedule_md5s` method
+    (`POST /schedules/md5`, verified against SchedulesDirect/JSON-Service's
+    wiki) returns per-station/day md5+`lastModified` without the full
+    schedule payload; only station/days whose md5 differs from what's
+    cached (or that were never cached) trigger a full `get_schedules` call.
+
+    This is a distinct, **global** (all-epg-editor-lineups) pipeline from
+    the per-lineup `POST /api/lineups/{lineup_id}/sync-and-generate`
+    endpoint pulled forward into Phase 1 (no md5-skip optimization, scoped
+    to one lineup) — at the time this was written the two mechanisms
+    coexisted: the per-lineup button for "refresh just this one lineup, no
+    skip-optimization, right now," and the global one for "run the real
+    scheduled pipeline across everything, right now" (item 30).
+
+    **Update:** per Andrew's decision, the Phase 1 stopgap has since been
+    superseded by this global refresh pipeline and fully removed —
+    `services/sync.py`, `api/sync.py`, `models/sync.py`, and
+    `POST /api/lineups/{lineup_id}/sync-and-generate` no longer exist.
+    `refresh_all_lineups` (this item) is now the only sync/generate
+    mechanism in the app. The "both mechanisms coexist" framing above
+    describes the state of the app only up through this item's initial
+    implementation, not the current state.
+
+    One bad SD lineup/station/epg-editor lineup doesn't abort the whole
+    run (collected into the result's `errors`); an auth/account-level SD
+    failure does abort the run (propagates), since every subsequent call
+    would fail identically.
 30. **Manual "refresh now"** (`backend-developer` + `frontend-developer`) —
     API endpoint running the same pipeline on demand, triggered from the UI.
+    Done (backend half): `POST /api/refresh-now` — not nested under
+    `/lineups/{id}`, since it's explicitly the same global pipeline as item
+    29, not a per-lineup action — returning the same `RefreshResult` shape
+    the scheduled job logs. Does not reset/reschedule the scheduled job's
+    timer in any way; it's an independent, on-demand run of the identical
+    function. Frontend trigger/UI still pending.
 31. **Decide refresh interval + env var name** (`backend-developer`) —
     propose default + name, confirm with Andrew (open decision per
-    CLAUDE.md).
+    CLAUDE.md). Done: confirmed `EPG_EDITOR_REFRESH_INTERVAL` (deliberately
+    no `_HOURS` suffix — the unit is documented in prose everywhere this
+    var is referenced, not baked into the name), a plain number of hours,
+    defaulting to **12**. Values below **1** hour are clamped up to 1
+    (rather than rejected outright) per SchedulesDirect's own documented
+    courtesy request not to sync more than once an hour — a misconfigured
+    env var degrades to "syncs somewhat more often than ideal" instead of
+    crashing the app at startup.
 32. **Review** (`peer-reviewer`).
+
+    **Update:** peer review found one HIGH-severity bug and three
+    lower-severity ones in this pipeline before it ran against a real
+    account; all four fixed:
+    - HIGH — `services/refresh.py`'s program-fetch step used to scan only
+      the schedule days *refetched this run* to decide which program IDs
+      to fetch, so a failed `/programs` call for a schedule day whose md5
+      later went unchanged would never be retried again — permanently
+      "Unknown" titles with no further visible error. Fixed by scanning
+      every cached schedule day in the guide window each run (refetched or
+      skipped-as-unchanged) and adding a program-level md5 skip
+      (`CachedProgram.scheduleMd5`) so this doesn't make every run
+      re-fetch every program unconditionally. Also added chunking to
+      `SdClient.get_programs` (SD's documented 5000-ID cap per request).
+    - MEDIUM — `SdClient.get_lineup_stations` didn't check SD's `code`
+      field the way `list_account_lineups`/`get_account_status` already
+      did, so an SD error body on HTTP 200 could silently overwrite a good
+      cached station roster with an empty one, suppressed from retry for
+      up to `STATION_ROSTER_TTL`. Fixed with the same `code` check.
+    - MEDIUM-LOW — `SdScheduleMd5Response` validated the whole
+      `/schedules/md5` response atomically, so one malformed per-station
+      entry failed validation for the entire batch, falling back to a
+      full schedule refetch for *every* mapped station, not just the bad
+      one. Fixed with per-station lenient parsing.
+    - LOW — `scheduler/jobs.py`'s `get_refresh_interval_hours` didn't
+      guard against a non-finite `EPG_EDITOR_REFRESH_INTERVAL`
+      (`nan`/`inf`/an overflow like `1e400`), which crashed app startup
+      instead of falling back to the default as documented. Fixed with a
+      `math.isfinite` check.
 
 33. 🛑 **USER CHECKPOINT — real scheduled refresh**
     What to do: let the real app run with the scheduler active against your

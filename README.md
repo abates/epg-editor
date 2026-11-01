@@ -42,6 +42,7 @@ Frontend (Vite + npm) — see [`frontend/README.md`](frontend/README.md).
 | --- | --- | --- |
 | `SD_USERNAME` | yes | SchedulesDirect.org account username |
 | `SD_PASSWORD` | yes | SchedulesDirect.org account password |
+| `EPG_EDITOR_REFRESH_INTERVAL` | no | How often the background refresh job re-syncs SD data and regenerates XMLTV, in **hours** (the name has no `_HOURS` suffix, but the value is always a number of hours). Defaults to `12`. Values below `1` are clamped up to `1` hour, per SchedulesDirect's own request not to sync more than once an hour. A manual "refresh now" action (UI button / `POST /api/refresh-now`) runs the same pipeline on demand without affecting this schedule. |
 
 All other app state (lineups, channels, mappings, generated XMLTV) lives on
 the `/data` volume — see [docs/data-model.md](docs/data-model.md).

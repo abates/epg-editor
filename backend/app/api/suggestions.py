@@ -1,17 +1,17 @@
 """`/api/lineups/{lineup_id}/suggestions` and
 `/api/lineups/{lineup_id}/bulk-accept-suggestions`.
 
-Thin HTTP layer only: resolves a `SdClient` (reusing `app.api.sync`'s
-`get_sd_client` dependency, same real-or-mocked construction pattern) and
-delegates everything else to `app.services.suggestions`, per CLAUDE.md's
-module layering.
+Thin HTTP layer only: resolves a `SdClient` (reusing
+`app.api.dependencies`'s `get_sd_client` dependency, same real-or-mocked
+construction pattern) and delegates everything else to
+`app.services.suggestions`, per CLAUDE.md's module layering.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api.sync import get_sd_client
+from app.api.dependencies import get_sd_client
 from app.models.suggestions import BulkAcceptResult, SuggestionResult
 from app.sd_client.client import SdClient, SdClientError
 from app.services import suggestions as suggestions_service
@@ -32,7 +32,7 @@ async def generate_suggestions(
     `app.services.suggestions.generate_suggestions`. 404 if the lineup
     doesn't exist; a SD-level failure (auth, transport, malformed
     response) fetching a station roster is surfaced as a clean 502 rather
-    than a raw 500, mirroring `api/sync.py`'s error handling.
+    than a raw 500.
     """
     try:
         return await suggestions_service.generate_suggestions(lineup_id, sd_client)

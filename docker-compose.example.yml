@@ -11,5 +11,9 @@ services:
     environment:
       SD_USERNAME: "${SD_USERNAME}"
       SD_PASSWORD: "${SD_PASSWORD}"
+      # Optional: how often the background refresh job re-syncs SchedulesDirect
+      # data and regenerates XMLTV, in hours (unitless name; value is hours).
+      # Defaults to 12 if unset; values below 1 are clamped up to 1 hour.
+      # EPG_EDITOR_REFRESH_INTERVAL: "12"
     volumes:
       - ./epg-editor-data:/data

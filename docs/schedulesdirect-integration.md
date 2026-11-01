@@ -26,10 +26,27 @@ SD throttles and expects well-behaved clients to cache. Concretely:
 - Program/schedule data changes daily; SD exposes `md5` hashes per
   station/day so a client can check "has this changed" before re-pulling the
   full schedule — use that to avoid redundant fetches on the scheduled
-  refresh.
+  refresh. Implemented via `POST /schedules/md5` (`SdClient
+  .get_schedule_md5s`, same request shape as `/schedules` — an array of
+  `{stationID, date[]}` — but a response keyed `stationID -> date ->
+  {code, message, lastModified, md5}`, verified against
+  SchedulesDirect/JSON-Service's wiki during Phase 5 implementation): the
+  refresh job (`backend/app/services/refresh.py`) calls this first and
+  only falls through to the full `POST /schedules` for a station/day whose
+  md5 differs from what's cached (or was never cached).
+- SD's own docs ask clients not to sync more than once an hour — the
+  scheduled refresh job's interval (`EPG_EDITOR_REFRESH_INTERVAL`, default
+  12 hours) is clamped up to a 1-hour floor if configured lower.
 - Only fetch schedules/programs for stations that are actually mapped to a
   channel in a lineup — no speculative bulk-fetching of every station in
   every associated SD lineup.
+- SD documents a hard cap of 5000 IDs per `POST /programs` request.
+  `SdClient.get_programs` chunks internally (`PROGRAMS_REQUEST_CHUNK_SIZE`)
+  so callers can pass however many program IDs a guide window's worth of
+  mapped stations actually needs without tripping over that cap — a real
+  account's mapped-station count can exceed it, and a cap-exceeding
+  request would otherwise fail outright (found during peer review of the
+  Phase 5 refresh pipeline, docs/backlog.md item 32).
 
 ## Endpoints needed
 

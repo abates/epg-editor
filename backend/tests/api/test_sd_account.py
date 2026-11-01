@@ -1,10 +1,11 @@
 """Tests for `/api/sd-account/lineups` and `/api/sd-account/limit`.
 
 Per CLAUDE.md, no real SD credentials or network are touched here: the
-`get_sd_client` FastAPI dependency (shared with `api/sync.py`) is
-overridden with a mock-transport-backed `SdClient` for every test that
-needs to reach "SD"; the missing-credentials test deliberately leaves
-that dependency un-overridden so the real `SdClient.from_env()` path runs.
+`get_sd_client` FastAPI dependency (shared with every other SD-backed
+router, see `app.api.dependencies`) is overridden with a mock-transport-
+backed `SdClient` for every test that needs to reach "SD"; the missing-
+credentials test deliberately leaves that dependency un-overridden so the
+real `SdClient.from_env()` path runs.
 
 These routes manage the user's *SD account* lineups, not epg-editor's own
 persisted lineups — `test_never_touches_lineups_json` confirms that
@@ -20,7 +21,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.sync import get_sd_client
+from app.api.dependencies import get_sd_client
 from app.main import app
 from app.sd_client.client import SdClient
 

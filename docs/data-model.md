@@ -130,6 +130,28 @@ be organized so a single station's or lineup's cache can be invalidated/
 refreshed independently (avoid one giant blob). Include a fetched-at timestamp
 per cached entity so the refresh job can apply a TTL.
 
+A cached SD lineup's station roster (`stations/<sdLineupId>.json`,
+`CachedLineupStations`) additionally records SD's own `GET /status`
+`lineups[].modified` timestamp *as of the fetch that produced the cache
+entry*, alongside `fetchedAt`. Phase 5's refresh job
+(`backend/app/services/refresh.py`) compares a fresh `modified` value
+against this to decide whether a roster actually needs re-fetching, with a
+30-day fallback TTL (keyed off `fetchedAt`) forcing a re-fetch regardless —
+see CLAUDE.md's "Guide refresh" section.
+
+A cached program's metadata (`programs/<programId>.json`, `CachedProgram`)
+additionally records `scheduleMd5`: the per-airing md5 (`SdScheduleProgram
+.md5`) reported by whichever schedule day this program was fetched on
+behalf of, at fetch time. The refresh job compares this against the md5 a
+*current* cached schedule reports for the same program ID — scanning every
+cached schedule day in the guide window, not just ones refetched in a given
+run — to decide whether a program needs (re-)fetching. This is what makes a
+previously-failed `/programs` fetch self-heal on a later run even when the
+schedule day it belongs to has since gone md5-unchanged (a schedule day's
+own md5 not changing used to mean its programs' fetch was never retried
+again once it had failed once — a HIGH-severity peer-review finding fixed
+under docs/backlog.md item 32).
+
 ## `/data/output/`
 
 Generated XMLTV files, one per epg-editor lineup by default:

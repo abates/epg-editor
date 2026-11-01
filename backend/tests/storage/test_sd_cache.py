@@ -21,6 +21,34 @@ def test_lineup_stations_round_trip_and_cache_miss(tmp_path):
     assert loaded.fetchedAt is not None
 
 
+def test_lineup_stations_round_trip_preserves_modified(tmp_path):
+    """`modified` (SD's own `GET /status` lineup-modified timestamp at fetch
+    time) round-trips alongside `fetchedAt`, for the refresh job's
+    freshness check (see `services/refresh.py`)."""
+    response = SdLineupStationsResponse(stations=[])
+    modified = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    sd_cache.save_lineup_stations(
+        "USA-OTA12345", response, modified=modified, base_dir=tmp_path
+    )
+
+    loaded = sd_cache.load_lineup_stations("USA-OTA12345", base_dir=tmp_path)
+    assert loaded is not None
+    assert loaded.modified == modified
+
+
+def test_lineup_stations_modified_defaults_to_none(tmp_path):
+    """Callers that don't have a `modified` value on hand (e.g.
+    `services/suggestions.py`'s cache-miss-only fetch) still work."""
+    response = SdLineupStationsResponse(stations=[])
+
+    sd_cache.save_lineup_stations("USA-OTA12345", response, base_dir=tmp_path)
+
+    loaded = sd_cache.load_lineup_stations("USA-OTA12345", base_dir=tmp_path)
+    assert loaded is not None
+    assert loaded.modified is None
+
+
 def test_lineup_stations_invalidate_removes_only_that_lineup(tmp_path):
     response = SdLineupStationsResponse(stations=[])
     sd_cache.save_lineup_stations("lineup-a", response, base_dir=tmp_path)

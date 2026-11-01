@@ -2,9 +2,9 @@
 `POST /api/lineups/{lineup_id}/bulk-accept-suggestions`.
 
 Per CLAUDE.md, no real SD credentials or network are touched here: the
-`get_sd_client` FastAPI dependency (shared with `api/sync.py`) is
-overridden with a mock-transport-backed `SdClient` for every test that
-needs to reach "SD".
+`get_sd_client` FastAPI dependency (shared with every other SD-backed
+router, see `app.api.dependencies`) is overridden with a mock-transport-
+backed `SdClient` for every test that needs to reach "SD".
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.sync import get_sd_client
+from app.api.dependencies import get_sd_client
 from app.main import app
 from app.sd_client.client import SdClient
 from app.storage import sd_cache

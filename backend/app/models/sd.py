@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import datetime as dt
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, RootModel, ValidationError, model_validator
 
 # SD's JSON responses use a field literally named `datetime`. Several models
 # below have a `datetime` field, which (with `from __future__ import
@@ -189,8 +191,23 @@ class SdLineupMapEntry(SdModel):
 
 
 class SdLineupStationsResponse(SdModel):
-    """Response from `GET /lineups/{lineupID}`: a lineup's station roster."""
+    """Response from `GET /lineups/{lineupID}`: a lineup's station roster.
 
+    `code`/`response`/`message` are only populated when SD returns an
+    error instead of a real roster (e.g. `{"code": 2100, "response":
+    "LINEUP_NOT_FOUND"}`) — like `SdAccountLineupsResponse`/`SdStatusResponse`,
+    every other field here is optional, so that would otherwise validate as
+    an empty-but-successful roster instead of surfacing the error. See
+    `SdClient.get_lineup_stations`, which checks `code` explicitly the same
+    way `list_account_lineups`/`get_account_status` already do (reviewer
+    finding: without this check, a cached station roster could be silently
+    replaced by an empty one and stamped with SD's `modified` timestamp,
+    suppressing a retry for up to `STATION_ROSTER_TTL`).
+    """
+
+    code: int | None = None
+    response: str | None = None
+    message: str | None = None
     map: list[SdLineupMapEntry] = Field(default_factory=list)
     stations: list[SdStation] = Field(default_factory=list)
     metadata: dict[str, object] | None = None
@@ -231,9 +248,10 @@ class SdStationSchedule(SdModel):
     HTTP response, rather than as an HTTP-level error — this item then has
     no real `programs`/`metadata` to speak of. `code`/`response` are
     modeled here (rather than silently dropped by `SdModel`'s
-    `extra="ignore"`) so `services/sync.py` can detect a non-success `code`
-    and record it instead of treating a blank schedule as a successful
-    empty fetch. `code` is `None`/`0` for a normal, successful item.
+    `extra="ignore"`) so `services/refresh.py` can detect a non-success
+    `code` and record it instead of treating a blank schedule as a
+    successful empty fetch. `code` is `None`/`0` for a normal, successful
+    item.
     """
 
     stationID: str
@@ -243,12 +261,85 @@ class SdStationSchedule(SdModel):
     response: str | None = None
 
 
-# A dedicated `POST /schedules/md5`-only response model isn't defined here:
-# `SdClient` doesn't call that endpoint yet (the md5-driven "skip unchanged
-# schedules" optimization is Phase 5/scheduler work per docs/backlog.md).
-# `SdStationSchedule` above already carries an md5 per program plus a
-# `metadata.md5` for the whole station-day, which is what the Phase 1
-# models need.
+class SdScheduleMd5DateEntry(SdModel):
+    """One date's entry within `POST /schedules/md5`'s response.
+
+    Verified against SchedulesDirect/JSON-Service's wiki ("Download the MD5
+    and lastModified for stationIDs" section of API-20141201.md) during
+    Phase 5 implementation — https://github.com/SchedulesDirect/JSON-Service/wiki/API-20141201.
+    A normal entry carries `code=0`/`message="OK"` plus `lastModified`/`md5`;
+    SD can presumably report a per-date problem (e.g. the same
+    `7020 SCHEDULE_RANGE_EXCEEDED` family `get_schedules`'s per-item entries
+    can carry) the same way, with no real `md5` to trust — the docs don't
+    show a worked error example for this specific endpoint, but `code`/
+    `response` are modeled defensively here (rather than silently dropped by
+    `SdModel`'s `extra="ignore"`) so callers can check `code` before
+    trusting `md5`, consistent with how `SdStationSchedule`/`SdProgram`
+    above already handle their own per-item error shape.
+    """
+
+    code: int | None = None
+    message: str | None = None
+    response: str | None = None
+    lastModified: dt.datetime | None = None
+    md5: str | None = None
+
+
+class SdScheduleMd5Response(RootModel[dict[str, dict[str, SdScheduleMd5DateEntry]]]):
+    """Response from `POST /schedules/md5`: `stationID -> date -> md5 info`.
+
+    SD's response here isn't a fixed-field object — it's a dict keyed
+    dynamically by whatever `stationID`s were requested, each mapping to a
+    dict keyed by whatever `date`s were requested — hence `RootModel` rather
+    than a `SdModel` subclass with named fields. `SdClient.get_schedule_md5s`
+    still passes the decoded body through `SdClient._raise_for_top_level_sd_error`
+    first, the same as `get_schedules`/`get_programs`, to catch SD reporting
+    a single account-wide error object instead of this per-station shape.
+
+    Each station's entry is validated independently (see
+    `_tolerate_malformed_station_entries` below) rather than validating the
+    whole `dict[str, dict[str, SdScheduleMd5DateEntry]]` atomically: SD can
+    report a per-station problem in a flatter shape than the expected
+    per-date dict (e.g. `{"S1": {"code": 2201, ...}}` instead of
+    `{"S1": {"2026-01-01": {"code": 0, "md5": "..."}}}`). Without
+    per-station tolerance, that one malformed entry would fail validation
+    for the *entire* response, and `services/refresh.py` would fall back to
+    treating every mapped station/day as needing a full refetch — not just
+    the one bad station. A station whose entry doesn't fit the expected
+    shape is instead dropped from `root` entirely, so `for_station` returns
+    `{}` for it — the same as a station SD didn't mention at all, which
+    `_needs_schedule_fetch` already treats as "needs a full fetch."
+    """
+
+    root: dict[str, dict[str, SdScheduleMd5DateEntry]] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _tolerate_malformed_station_entries(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        sanitized: dict[str, dict[str, SdScheduleMd5DateEntry]] = {}
+        for station_id, value in data.items():
+            sanitized[station_id] = cls._validate_station_entry(value)
+        return sanitized
+
+    @staticmethod
+    def _validate_station_entry(value: Any) -> dict[str, SdScheduleMd5DateEntry]:
+        """Validate one station's `date -> md5 info` entry, or `{}` on any
+        shape/validation mismatch — see class docstring."""
+        if not isinstance(value, dict):
+            return {}
+        try:
+            return {
+                date: SdScheduleMd5DateEntry.model_validate(entry)
+                for date, entry in value.items()
+            }
+        except ValidationError:
+            return {}
+
+    def for_station(self, station_id: str) -> dict[str, SdScheduleMd5DateEntry]:
+        """Convenience accessor: this station's `date -> md5 info` dict, or `{}`."""
+        return self.root.get(station_id, {})
 
 
 # --- Programs -----------------------------------------------------------------
@@ -269,7 +360,7 @@ class SdProgram(SdModel):
     Like `SdStationSchedule` above, SD can report a per-program error (e.g.
     an unknown/queued program ID) as an item with only `programID` and a
     `code`/`response`, no real title/description data. Modeled here so
-    `services/sync.py` can detect and record that instead of caching a
+    `services/refresh.py` can detect and record that instead of caching a
     blank/untitled program as if the fetch had succeeded. `code` is
     `None`/`0` for a normal, successful item.
     """
@@ -292,8 +383,23 @@ class SdProgram(SdModel):
 
 
 class CachedLineupStations(SdModel):
+    """Cached station roster for one SD lineup.
+
+    `modified` is SD's own `GET /status` `lineups[].modified` timestamp for
+    this SD lineup *as of the fetch that produced this cache entry* — not a
+    live/recomputed value. `services/refresh.py`'s scheduled-refresh job
+    compares this against a freshly-fetched `modified` value (plus a 30-day
+    TTL fallback keyed off `fetchedAt`) to decide whether this roster needs
+    re-fetching, per docs/backlog.md item 29's scope. `None` for entries
+    written before this field existed, or when no `GET /status` lineup
+    entry was available at fetch time — either case is treated as "unknown,
+    refetch to establish a baseline" by the refresh job rather than being
+    read as "definitely unchanged."
+    """
+
     fetchedAt: dt.datetime
     sdLineupId: str
+    modified: dt.datetime | None = None
     data: SdLineupStationsResponse
 
 
@@ -305,5 +411,23 @@ class CachedStationSchedule(SdModel):
 
 
 class CachedProgram(SdModel):
+    """Cached program metadata for one SD program ID.
+
+    `scheduleMd5` records the per-airing `SdScheduleProgram.md5` value (from
+    whichever schedule day this program was fetched on behalf of) *as of the
+    fetch that produced this cache entry* — not SD's own program-level data,
+    which has no md5 of its own. `services/refresh.py`'s refresh job compares
+    this against the md5 a *current* cached schedule reports for the same
+    program ID to decide whether this program needs re-fetching, independent
+    of whether that schedule day's own md5 happened to change this run — see
+    that module's docstring for why this independence matters (a schedule
+    day can go unchanged for months while a program fetch that failed on an
+    earlier run would otherwise never be retried). `None` for entries
+    written before this field existed, or when the schedule entry that
+    prompted the fetch had no md5 of its own — either case means "unknown,
+    refetch on any future mismatch" rather than "definitely still correct."
+    """
+
     fetchedAt: dt.datetime
     data: SdProgram
+    scheduleMd5: str | None = None

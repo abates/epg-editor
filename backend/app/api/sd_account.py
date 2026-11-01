@@ -6,10 +6,11 @@ headend subscriptions) — entirely distinct from
 updates which SD lineup ID *strings* one of epg-editor's own lineups
 references locally. Nothing here touches `config/lineups.json`.
 
-Thin HTTP layer only: resolves a `SdClient` (reusing `app.api.sync`'s
-`get_sd_client` dependency, same real-or-mocked construction pattern used
-by every other SD-backed router) and delegates everything else to
-`app.services.sd_account`, per CLAUDE.md's module layering.
+Thin HTTP layer only: resolves a `SdClient` (reusing
+`app.api.dependencies`'s `get_sd_client` dependency, same real-or-mocked
+construction pattern used by every other SD-backed router) and delegates
+everything else to `app.services.sd_account`, per CLAUDE.md's module
+layering.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 
-from app.api.sync import get_sd_client
+from app.api.dependencies import get_sd_client
 from app.models.sd import SdAddRemoveLineupResponse, SdLineupSummary
 from app.models.sd_account import (
     LINEUP_ID_PATTERN,
@@ -40,7 +41,7 @@ async def list_sd_account_lineups(
     503 if `SD_USERNAME`/`SD_PASSWORD` aren't configured (via
     `get_sd_client`); 502 if SD itself rejects the request (bad/expired
     token, SD-side error) — mirrors every other SD-backed route's error
-    handling (see `api/sync.py`).
+    handling.
     """
     try:
         return await sd_account_service.list_account_lineups(sd_client)
