@@ -9,6 +9,7 @@ import {
 } from '../components/channelFormValues';
 import { ChannelRow } from '../components/ChannelRow';
 import { SdLineupIdsEditor } from '../components/SdLineupIdsEditor';
+import { SyncAndGeneratePanel } from '../components/SyncAndGeneratePanel';
 import type { Channel, Lineup } from '../types';
 import {
   Card,
@@ -148,6 +149,9 @@ export function LineupDetailPage({ lineupId, onBack }: LineupDetailPageProps) {
             Source: {state.lineup.source} · {state.lineup.channels.length} channel
             {state.lineup.channels.length === 1 ? '' : 's'} · created {state.lineup.createdAt}
           </Meta>
+
+          <SubsectionTitle>Sync & Generate</SubsectionTitle>
+          <SyncAndGeneratePanel lineupId={lineupId} />
 
           <SubsectionTitle>SchedulesDirect lineups</SubsectionTitle>
           <SdLineupIdsEditor

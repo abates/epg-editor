@@ -63,3 +63,28 @@ export interface Lineup {
   channels: Channel[];
 }
 
+/** A single station-scoped failure within an otherwise-successful sync. */
+export interface StationSyncError {
+  sdStationId: string;
+  message: string;
+}
+
+/**
+ * Result of `POST /api/lineups/{lineupId}/sync-and-generate`: fetching
+ * fresh SD schedule/program data for every confirmed-mapped channel in a
+ * lineup, caching it, and regenerating the lineup's XMLTV output file.
+ *
+ * A 200 response doesn't guarantee every station succeeded -
+ * `stationErrors`/`errors` can be non-empty alongside non-zero success
+ * counts (partial failure), so callers should surface both rather than
+ * treating a 200 as unconditional success.
+ */
+export interface SyncResult {
+  lineupId: string;
+  stationsSynced: number;
+  scheduleDaysFetched: number;
+  programsFetched: number;
+  channelsGenerated: number;
+  stationErrors: StationSyncError[];
+  errors: string[];
+}
