@@ -2,10 +2,10 @@
 #
 # Single multi-stage image for epg-editor: build the React frontend, then
 # copy its static output into the Python/FastAPI backend image. One process
-# (uvicorn) ends up serving the API, generated XMLTV, and (once the backend
-# wires up static-file serving — not yet implemented, see CLAUDE.md's
-# "Docker" section) the frontend. See CLAUDE.md's "Docker" section for the
-# constraints this follows.
+# (uvicorn) serves the API, generated XMLTV, and the static frontend (via
+# `app.api.static`'s `/assets` StaticFiles mount plus an app-wide 404-
+# exception-handler that serves `index.html` for unmatched SPA routes). See
+# CLAUDE.md's "Docker" section for the constraints this follows.
 
 # ---------------------------------------------------------------------------
 # Stage: frontend-build
@@ -46,12 +46,21 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY backend/ ./
 RUN uv sync --frozen --no-dev
 
-# Pull in the built frontend assets from the first stage. Nothing in the
-# backend serves these yet (no StaticFiles/SPA-fallback mount in
-# app/main.py as of this writing) — this just stages the artifact at a
-# path outside the backend source tree so that wiring, when it lands, has
-# somewhere to point. See CLAUDE.md's "Docker" section.
+# Pull in the built frontend assets from the first stage, staged at a path
+# outside the backend source tree (a sibling of /app/backend, not nested
+# under it). `app.api.static`'s default `EPG_EDITOR_FRONTEND_DIR` resolves
+# to exactly this path given this image's layout. See CLAUDE.md's "Docker"
+# section.
 COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
+
+# Set the frontend directory explicitly rather than relying solely on
+# `app.api.static`'s `parents[N]`-based default path computation at
+# runtime. The default is derived from this file's own location on disk
+# and would silently break (frontend serving quietly no-ops -- see that
+# module's logged warning) if the backend's install layout ever changes,
+# e.g. switching to `uv sync --no-editable`. This makes the production
+# path explicit and independent of that detail.
+ENV EPG_EDITOR_FRONTEND_DIR=/app/frontend/dist
 
 # Bootstrap script: ensures /data/{config,cache,output} exist before the
 # app starts (belt-and-suspenders alongside app.storage.ensure_data_dirs(),

@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api import health, lineups, m3u, refresh, sd_account, suggestions, xmltv
+from app.api.static import register_static_frontend
 from app.scheduler.jobs import create_scheduler
 from app.storage.paths import ensure_data_dirs
 
@@ -52,6 +53,12 @@ def create_app() -> FastAPI:
     # "Reserved URL path prefixes") — registered directly on the app, not
     # nested under `/api`.
     app.include_router(xmltv.router)
+    # Static frontend (built React SPA): mounts /assets and installs a
+    # 404-exception-handler-based fallback to `index.html` for the SPA's
+    # client-side router (see app.api.static's module docstring for why
+    # it's a 404 handler rather than a catch-all route). No-ops if no
+    # frontend build is present (local dev, tests).
+    register_static_frontend(app)
     return app
 
 
