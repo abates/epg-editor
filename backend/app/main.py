@@ -42,7 +42,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     """Build the FastAPI application."""
-    app = FastAPI(title="epg-editor", lifespan=lifespan)
+    app = FastAPI(
+        title="epg-editor",
+        lifespan=lifespan,
+        # Moved under the reserved `/api` prefix so FastAPI's own docs
+        # routes can't collide with an SPA client-side route at the
+        # default `/docs`, `/redoc`, `/openapi.json` paths (see CLAUDE.md's
+        # "Reserved URL path prefixes" and `app.api.static`'s
+        # `_RESERVED_TOP_LEVEL_SEGMENTS` guard, which already covers `/api`
+        # and therefore these too).
+        docs_url="/api/docs",
+        redoc_url="/api/redoc",
+        openapi_url="/api/openapi.json",
+    )
     app.include_router(health.router, prefix="/api")
     app.include_router(lineups.router, prefix="/api")
     app.include_router(m3u.router, prefix="/api")
