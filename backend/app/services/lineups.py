@@ -83,6 +83,28 @@ def create_lineup(name: str) -> Lineup:
     return lineup
 
 
+def delete_lineup(lineup_id: str) -> None:
+    """Remove an entire lineup (and all its channels/mappings) from
+    `config/lineups.json`.
+
+    Raises `NotFoundError` if `lineup_id` doesn't exist, consistent with
+    every other mutator here. Scope is intentionally minimal: this only
+    removes the lineup's entry from `config/lineups.json`. It does *not*
+    delete the lineup's generated XMLTV output file (`output/<lineup-id>.xml`)
+    or any SchedulesDirect cache entries — both are regenerable/rebuildable
+    from `config/` + SD per CLAUDE.md's persistent-data-layout notes, so
+    leaving a stale output file behind is harmless (it's simply never
+    regenerated again, and can be cleaned up by the next full cache/output
+    rebuild) rather than something this call needs to clean up itself.
+    """
+
+    def mutate(data: LineupsFile) -> None:
+        lineup = _find_lineup(data, lineup_id)
+        data.lineups.remove(lineup)
+
+    update_lineups(mutate)
+
+
 def update_lineup_sd_lineup_ids(lineup_id: str, sd_lineup_ids: list[str]) -> Lineup:
     """Replace a lineup's associated SD lineup IDs wholesale.
 

@@ -72,6 +72,24 @@ def test_add_edit_remove_channel(client):
     assert lineup_after_remove["channels"] == []
 
 
+def test_delete_lineup(client):
+    lineup_id = client.post("/api/lineups", json={"name": "Lineup"}).json()["id"]
+    other_id = client.post("/api/lineups", json={"name": "Other"}).json()["id"]
+
+    response = client.delete(f"/api/lineups/{lineup_id}")
+    assert response.status_code == 204
+
+    list_response = client.get("/api/lineups")
+    assert [lineup["id"] for lineup in list_response.json()] == [other_id]
+
+    assert client.get(f"/api/lineups/{lineup_id}").status_code == 404
+
+
+def test_delete_lineup_404_when_missing(client):
+    response = client.delete("/api/lineups/does-not-exist")
+    assert response.status_code == 404
+
+
 def test_update_sd_lineup_ids(client):
     lineup_id = client.post("/api/lineups", json={"name": "Lineup"}).json()["id"]
 

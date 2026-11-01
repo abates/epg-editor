@@ -27,6 +27,7 @@ Not regenerable from SchedulesDirect — back this up, don't treat it as cache.
           "name": "KGO-TV",
           "logoUrl": "https://...",
           "tvgId": "KGO.us",
+          "group": "Local",
           "sourceStreamUrl": "http://hdhomerun.local/auto/v7.1",
           "missingSince": null,
           "mapping": {
@@ -50,6 +51,21 @@ Notes:
 
 - `sourceStreamUrl` is retained purely as metadata (useful context when
   re-importing/refreshing from M3U); epg-editor never proxies or plays streams.
+- `group`: from an M3U entry's `group-title` attribute (e.g. "Local",
+  "Sports"); `null` for manually-added channels and for M3U entries that
+  didn't specify one. Persisted (not just surfaced in an import-result
+  response) for future UI grouping/filtering. Updated in place on
+  re-import like the other M3U-derived fields (`name`, `logoUrl`, `number`,
+  `tvgId`, `sourceStreamUrl`).
+- `tvgId`/`number`: from an M3U entry's `tvg-id`/`tvg-chno` attributes.
+  **Real-world addition:** some HDHomeRun firmware exports omit
+  `tvg-id`/`tvg-chno` and instead emit `channel-id`/`channel-number` for
+  the same data — both are recognized as alternates, consulted only when
+  the standard `tvg-id`/`tvg-chno` attribute is absent on that entry (the
+  standard attribute wins when both are present). Found against a real
+  HDHomeRun firmware export during checkpoint 19, not a pre-specified
+  attribute name; see `backend/app/services/m3u.py`'s `parse_m3u`
+  docstring for the exact rule.
 - `missingSince`: `null` normally. When an `m3u`-sourced lineup is
   re-imported and this channel's `tvgId` (fallback: `number`) no longer
   appears in the new M3U, set this to the re-import timestamp instead of

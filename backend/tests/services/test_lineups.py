@@ -194,6 +194,47 @@ def test_update_channel_rejects_whitespace_only_name_without_corrupting_disk():
     assert reloaded.channels[0].name == "KGO-TV"
 
 
+# --- delete_lineup (checkpoint 19 CRUD gap) ---------------------------------
+
+
+def test_delete_lineup_removes_it():
+    lineup = lineups_service.create_lineup("Lineup to delete")
+    other = lineups_service.create_lineup("Other lineup")
+
+    lineups_service.delete_lineup(lineup.id)
+
+    remaining_ids = {l.id for l in lineups_service.list_lineups()}
+    assert remaining_ids == {other.id}
+
+
+def test_delete_lineup_raises_not_found_for_missing_lineup():
+    with pytest.raises(lineups_service.NotFoundError):
+        lineups_service.delete_lineup("does-not-exist")
+
+
+def test_concurrent_delete_and_mutation_on_different_lineups_do_not_lose_updates():
+    """`update_lineups`'s process-wide lock already structurally guarantees
+    this; a brief smoke test is enough (see CLAUDE.md task notes) rather
+    than a dedicated deep-dive, unlike the existing #1 concurrency tests
+    above which guard a real historical bug.
+    """
+    target = lineups_service.create_lineup("Delete me")
+    survivor = lineups_service.create_lineup("Survives")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        delete_future = pool.submit(lineups_service.delete_lineup, target.id)
+        add_future = pool.submit(
+            lineups_service.add_channel, survivor.id, name="Channel"
+        )
+        delete_future.result()
+        add_future.result()
+
+    remaining = lineups_service.list_lineups()
+    assert {l.id for l in remaining} == {survivor.id}
+    reloaded_survivor = lineups_service.get_lineup(survivor.id)
+    assert len(reloaded_survivor.channels) == 1
+
+
 # --- #4: can't remove a sdLineupId a confirmed mapping depends on ----------
 
 

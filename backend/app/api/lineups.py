@@ -76,6 +76,22 @@ def get_lineup(lineup_id: str) -> Lineup:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.delete("/lineups/{lineup_id}", status_code=204)
+def delete_lineup(lineup_id: str) -> None:
+    """Delete an entire lineup, including all its channels and mappings.
+
+    Only removes the lineup from `config/lineups.json` — any previously
+    generated `/xmltv/{lineup_id}.xml` output file or SD cache entries are
+    left in place (both are regenerable, see
+    `services.lineups.delete_lineup`'s docstring) rather than being cleaned
+    up as a side effect of this call.
+    """
+    try:
+        lineups_service.delete_lineup(lineup_id)
+    except lineups_service.NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.put("/lineups/{lineup_id}/sd-lineups", response_model=Lineup)
 def update_sd_lineup_ids(lineup_id: str, body: UpdateSdLineupIdsRequest) -> Lineup:
     """Replace a lineup's associated SchedulesDirect lineup IDs.

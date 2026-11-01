@@ -67,6 +67,15 @@ class Channel(BaseModel):
     name: NonEmptyName
     logoUrl: str | None = None
     tvgId: str | None = None
+    #: From an M3U entry's `group-title` attribute (e.g. "Local", "Sports").
+    #: `None` for manually-added channels and for M3U entries that didn't
+    #: specify one. Persisted (rather than surfaced only in the import
+    #: response) so it survives for later UI grouping/filtering, not just
+    #: for a single import's review screen — see Phase 2 backend-developer
+    #: report for the reasoning (CLAUDE.md's Core workflow 1 explicitly
+    #: calls out `group-title` as parsed metadata alongside `tvg-id`/
+    #: `tvg-name`/`tvg-logo`, all of which already have a persisted field).
+    group: str | None = None
     sourceStreamUrl: str | None = None
     missingSince: datetime | None = None
     mapping: ChannelMapping | None = None

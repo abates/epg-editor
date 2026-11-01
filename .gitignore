@@ -21,3 +21,7 @@ epg-editor-data/
 .DS_Store
 .idea/
 .vscode/
+
+# local config files
+.env
+data/

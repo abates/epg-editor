@@ -121,6 +121,15 @@ Dependency direction: `api/` and `scheduler/` → `services/` → `sd_client/` +
      `group-title`, channel number if present) to pre-populate the channel
      list. The stream URL is retained only as metadata on the channel record —
      epg-editor does not proxy or manage streams.
+     **Real-world addition (found against an actual HDHomeRun firmware
+     export, not pre-specified):** some HDHomeRun firmware revisions omit
+     `tvg-id`/`tvg-chno` entirely and instead emit `channel-id`/
+     `channel-number` for the same information. Both are recognized as
+     alternates for `tvgId`/channel number respectively, consulted only
+     when the standard `tvg-id`/`tvg-chno` attribute is absent — `tvg-id`/
+     `tvg-chno` win when both are present on the same entry. See
+     `backend/app/services/m3u.py`'s `parse_m3u` docstring for the precise
+     rule.
    - **Re-importing M3U into an existing lineup:** match incoming entries to
      existing channels by `tvgId` (fallback: channel number). Update matched
      channels' metadata in place (preserving their confirmed mapping).
