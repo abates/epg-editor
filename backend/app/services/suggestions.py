@@ -28,7 +28,13 @@ from pathlib import Path
 from rapidfuzz import fuzz
 from rapidfuzz.utils import default_process
 
-from app.models.lineup import ChannelMapping, Lineup, LineupsFile, MappingSuggestion
+from app.models.lineup import (
+    Channel,
+    ChannelMapping,
+    Lineup,
+    LineupsFile,
+    MappingSuggestion,
+)
 from app.models.sd import SdStation
 from app.models.suggestions import (
     BulkAcceptResult,
@@ -313,6 +319,135 @@ async def generate_suggestions(
     )
 
 
+def _load_station_lookup(
+    sd_lineup_id: str, base_dir: Path | None
+) -> dict[str, SdStation]:
+    """Cache-only lookup of one SD lineup's roster, keyed by `stationID`.
+
+    Reads whatever `storage.sd_cache` already has on disk — never calls
+    `sd_client`/SD itself (see `enrich_lineup_suggestions`'s docstring for
+    why: this is response-time display enrichment of already-cached data,
+    not a suggestion-generation path). Returns an empty dict (not an error)
+    on a cache miss, e.g. the SD lineup was since disassociated from every
+    epg-editor lineup, or the cache was cleared — callers treat that the
+    same as "station not found" and leave the display fields `None`.
+    """
+    cached = sd_cache.load_lineup_stations(sd_lineup_id, base_dir=base_dir)
+    if cached is None:
+        return {}
+    return {station.stationID: station for station in cached.data.stations}
+
+
+def _enrich_channel_suggestions_inplace(
+    channel: Channel,
+    station_lookups: dict[str, dict[str, SdStation]],
+    base_dir: Path | None,
+) -> None:
+    """Mutate `channel.mapping.suggestions` in place, filling in display-only
+    fields from `station_lookups` (populated lazily, on a cache miss, via
+    `_load_station_lookup`).
+
+    Shared helper behind both `enrich_channel_suggestions` (fresh,
+    single-use `station_lookups` dict) and `enrich_lineup_suggestions`/
+    `enrich_lineups_suggestions` (one `station_lookups` dict shared across
+    every channel in a lineup/every lineup in a list), so a given
+    `sdLineupId`'s cache file is read at most once per top-level enrichment
+    call no matter how many channels/suggestions reference it — never
+    re-read redundantly within the same call. Callers are responsible for
+    only ever calling this on a deep copy (see the public functions below);
+    it never touches `storage.lineups.update_lineups`/`save_lineups` itself.
+    """
+    mapping = channel.mapping
+    if mapping is None or not mapping.suggestions:
+        return
+    for suggestion in mapping.suggestions:
+        lookup = station_lookups.get(suggestion.sdLineupId)
+        if lookup is None:
+            lookup = _load_station_lookup(suggestion.sdLineupId, base_dir)
+            station_lookups[suggestion.sdLineupId] = lookup
+        station = lookup.get(suggestion.sdStationId)
+        if station is None:
+            continue
+        suggestion.stationName = station.name
+        suggestion.callsign = station.callsign
+        suggestion.logoUrl = station.logo.URL if station.logo else None
+
+
+def enrich_channel_suggestions(channel: Channel, *, base_dir: Path | None = None) -> Channel:
+    """Return a copy of `channel` with every suggestion's display-only fields
+    (`stationName`/`callsign`/`logoUrl`) filled in from the cached SD
+    station roster for that suggestion's `sdLineupId`.
+
+    Single-`Channel` sibling of `enrich_lineup_suggestions` below — same
+    pure, cache-only, read-only, response-shaping-only contract (see that
+    function's docstring for the full rationale), just scoped to one
+    channel rather than a whole lineup. Exists so every endpoint in
+    `api/lineups.py` that can return a bare `Channel` (`add_channel`,
+    `update_channel`, `set_channel_mapping`, ...) can enrich its response
+    the same way the two `GET` routes already do, without those endpoints
+    having to round-trip through a whole-`Lineup` enrichment or duplicate
+    `enrich_lineup_suggestions`'s logic. See that function's docstring for
+    why a cache miss falls back to `None` display fields instead of
+    raising, and why `logoUrl` never triggers a separate SD call.
+    """
+    enriched = channel.model_copy(deep=True)
+    station_lookups: dict[str, dict[str, SdStation]] = {}
+    _enrich_channel_suggestions_inplace(enriched, station_lookups, base_dir)
+    return enriched
+
+
+def enrich_lineup_suggestions(lineup: Lineup, *, base_dir: Path | None = None) -> Lineup:
+    """Return a copy of `lineup` with every suggestion's display-only fields
+    (`stationName`/`callsign`/`logoUrl`) filled in from the cached SD
+    station roster for that suggestion's `sdLineupId`.
+
+    Pure, cache-only, read-only enrichment applied *after* a `Lineup` has
+    already been loaded from `config/lineups.json` — intended for every
+    `api/lineups.py` (and `api/m3u.py`) route that returns a `Lineup`, so
+    suggestion display data never disappears depending on which endpoint
+    the frontend happens to be using for its local state update (see
+    `MappingSuggestion`'s docstring in `models/lineup.py` for the full
+    rationale/checkpoint-25 context, and the follow-on review finding that
+    broadened this past just the two `GET` routes). Callers must never pass
+    the result into `storage.lineups.update_lineups`/`save_lineups` — the
+    returned `Lineup` is a deep copy, so mutating or persisting it wouldn't
+    corrupt the on-disk file, but it also wouldn't actually be saved; this
+    function exists only to shape a response body.
+
+    A suggestion whose `(sdLineupId, sdStationId)` isn't found in the
+    cache (evicted, lineup disassociated since the suggestion was
+    generated, etc.) is left with `stationName`/`callsign`/`logoUrl` all
+    `None` rather than raising — the frontend falls back to the raw
+    `sdStationId` in that case. `logoUrl` comes from `SdStation.logo.URL`,
+    which `get_lineup_stations` already returns inline with the rest of a
+    station's roster entry — no separate "get logos" SD call is made or
+    needed for this.
+
+    Only ever reads `storage.sd_cache` (never `sd_client`), consistent with
+    this module's existing "depends only on `sd_client/` + `storage/`"
+    layering note — this function specifically only exercises the
+    `storage/` half.
+    """
+    enriched = lineup.model_copy(deep=True)
+    station_lookups: dict[str, dict[str, SdStation]] = {}
+
+    for channel in enriched.channels:
+        _enrich_channel_suggestions_inplace(channel, station_lookups, base_dir)
+
+    return enriched
+
+
+def enrich_lineups_suggestions(
+    lineups: list[Lineup], *, base_dir: Path | None = None
+) -> list[Lineup]:
+    """`enrich_lineup_suggestions` applied to every lineup in a list.
+
+    For `GET /api/lineups` (list_lineups), which returns every lineup at
+    once.
+    """
+    return [enrich_lineup_suggestions(lineup, base_dir=base_dir) for lineup in lineups]
+
+
 def bulk_accept_suggestions(
     lineup_id: str,
     *,
@@ -405,5 +540,8 @@ __all__ = [
     "BULK_ACCEPT_TIE_EPSILON",
     "MAX_SUGGESTIONS_PER_CHANNEL",
     "bulk_accept_suggestions",
+    "enrich_channel_suggestions",
+    "enrich_lineup_suggestions",
+    "enrich_lineups_suggestions",
     "generate_suggestions",
 ]

@@ -499,6 +499,130 @@ def test_bulk_accept_skips_channel_with_tied_top_suggestions_for_different_stati
     assert updated.mapping.suggestions
 
 
+def test_enrich_lineup_suggestions_populates_name_and_callsign_from_cache(tmp_path):
+    lineup_id = make_lineup(["USA-OTA12345"])
+    lineups_service.add_channel(lineup_id, name="KGO-TV")
+
+    sd_client = make_sd_client(
+        lineup_stations_handler("USA-OTA12345", [kgo_station(), fox_station()], [])
+    )
+    run(suggestions_service.generate_suggestions(lineup_id, sd_client, base_dir=tmp_path))
+
+    lineup = lineups_service.get_lineup(lineup_id)
+    # The in-memory `Lineup` fresh off `get_lineup` has no display fields
+    # yet -- only the enrichment step below should populate them.
+    assert all(s.stationName is None for s in lineup.channels[0].mapping.suggestions)
+
+    enriched = suggestions_service.enrich_lineup_suggestions(lineup, base_dir=tmp_path)
+
+    top = next(
+        s for s in enriched.channels[0].mapping.suggestions if s.sdStationId == "10123"
+    )
+    assert top.stationName == "KGO-TV"
+    assert top.callsign == "KGO"
+
+    # The original, un-enriched object passed in must be untouched (this
+    # is a pure, non-mutating enrichment step).
+    assert all(s.stationName is None for s in lineup.channels[0].mapping.suggestions)
+
+
+def test_enrich_lineup_suggestions_leaves_fields_none_on_cache_miss(tmp_path):
+    lineup_id = make_lineup(["USA-OTA12345"])
+    lineups_service.add_channel(lineup_id, name="KGO-TV")
+
+    sd_client = make_sd_client(
+        lineup_stations_handler("USA-OTA12345", [kgo_station()], [])
+    )
+    run(suggestions_service.generate_suggestions(lineup_id, sd_client, base_dir=tmp_path))
+
+    # Evict the cache entirely -- simulates a disassociated SD lineup or a
+    # cleared cache directory.
+    sd_cache.invalidate_lineup_stations("USA-OTA12345", base_dir=tmp_path)
+
+    lineup = lineups_service.get_lineup(lineup_id)
+    enriched = suggestions_service.enrich_lineup_suggestions(lineup, base_dir=tmp_path)
+
+    suggestion = enriched.channels[0].mapping.suggestions[0]
+    assert suggestion.sdStationId == "10123"
+    assert suggestion.stationName is None
+    assert suggestion.callsign is None
+    assert suggestion.logoUrl is None
+
+
+def test_enrich_lineups_suggestions_handles_a_list(tmp_path):
+    lineup_id = make_lineup(["USA-OTA12345"])
+    lineups_service.add_channel(lineup_id, name="KGO-TV")
+
+    sd_client = make_sd_client(
+        lineup_stations_handler("USA-OTA12345", [kgo_station()], [])
+    )
+    run(suggestions_service.generate_suggestions(lineup_id, sd_client, base_dir=tmp_path))
+
+    enriched = suggestions_service.enrich_lineups_suggestions(
+        lineups_service.list_lineups(), base_dir=tmp_path
+    )
+    lineup = next(l for l in enriched if l.id == lineup_id)
+    assert lineup.channels[0].mapping.suggestions[0].stationName == "KGO-TV"
+
+
+def test_enrich_channel_suggestions_populates_name_and_callsign_from_cache(tmp_path):
+    """Single-`Channel` sibling of `enrich_lineup_suggestions` — needed by
+    every `api/lineups.py` route that returns a bare `Channel` (e.g.
+    `update_channel`), not just the whole-`Lineup` GET routes."""
+    lineup_id = make_lineup(["USA-OTA12345"])
+    lineups_service.add_channel(lineup_id, name="KGO-TV")
+
+    sd_client = make_sd_client(
+        lineup_stations_handler("USA-OTA12345", [kgo_station(), fox_station()], [])
+    )
+    run(suggestions_service.generate_suggestions(lineup_id, sd_client, base_dir=tmp_path))
+
+    channel = lineups_service.get_lineup(lineup_id).channels[0]
+    # Fresh off storage, no display fields yet.
+    assert all(s.stationName is None for s in channel.mapping.suggestions)
+
+    enriched = suggestions_service.enrich_channel_suggestions(channel, base_dir=tmp_path)
+
+    top = next(
+        s for s in enriched.mapping.suggestions if s.sdStationId == "10123"
+    )
+    assert top.stationName == "KGO-TV"
+    assert top.callsign == "KGO"
+
+    # Pure, non-mutating: the original object passed in is untouched.
+    assert all(s.stationName is None for s in channel.mapping.suggestions)
+
+
+def test_enrich_channel_suggestions_leaves_fields_none_on_cache_miss(tmp_path):
+    lineup_id = make_lineup(["USA-OTA12345"])
+    lineups_service.add_channel(lineup_id, name="KGO-TV")
+
+    sd_client = make_sd_client(
+        lineup_stations_handler("USA-OTA12345", [kgo_station()], [])
+    )
+    run(suggestions_service.generate_suggestions(lineup_id, sd_client, base_dir=tmp_path))
+
+    sd_cache.invalidate_lineup_stations("USA-OTA12345", base_dir=tmp_path)
+
+    channel = lineups_service.get_lineup(lineup_id).channels[0]
+    enriched = suggestions_service.enrich_channel_suggestions(channel, base_dir=tmp_path)
+
+    suggestion = enriched.mapping.suggestions[0]
+    assert suggestion.sdStationId == "10123"
+    assert suggestion.stationName is None
+    assert suggestion.callsign is None
+    assert suggestion.logoUrl is None
+
+
+def test_enrich_channel_suggestions_noop_for_channel_with_no_mapping(tmp_path):
+    lineup_id = make_lineup(["USA-OTA12345"])
+    channel = lineups_service.add_channel(lineup_id, name="KGO-TV")
+
+    # No mapping at all yet -- must not raise, just return as-is.
+    enriched = suggestions_service.enrich_channel_suggestions(channel, base_dir=tmp_path)
+    assert enriched.mapping is None
+
+
 def test_bulk_accept_confirms_when_top_is_uniquely_highest_despite_other_high_scores(
     tmp_path,
 ):

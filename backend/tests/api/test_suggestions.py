@@ -9,6 +9,8 @@ needs to reach "SD".
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
@@ -16,6 +18,7 @@ from fastapi.testclient import TestClient
 from app.api.sync import get_sd_client
 from app.main import app
 from app.sd_client.client import SdClient
+from app.storage import sd_cache
 
 FAKE_TOKEN = "fake-token-abc123"
 
@@ -180,3 +183,196 @@ def test_bulk_accept_does_not_require_sd_client(client):
     response = client.post(f"/api/lineups/{lineup_id}/bulk-accept-suggestions")
     assert response.status_code == 200
     assert response.json()["confirmedCount"] == 0
+
+
+# --- Checkpoint 25: suggestion display enrichment (station name/call sign) --
+
+
+def test_get_lineup_enriches_suggestions_with_station_name_and_callsign(client):
+    """`GET /api/lineups/{lineup_id}` must surface enough for a human to
+    actually judge a suggestion — not just a bare SD station id."""
+    lineup_id, channel_id = create_lineup_with_channel(client)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        if request.url.path.endswith("/lineups/USA-OTA12345"):
+            return stations_response([kgo_station(), fox_station()])
+        raise AssertionError(f"unexpected path {request.url.path}")
+
+    override_sd_client_with(handler)
+    assert client.post(f"/api/lineups/{lineup_id}/suggestions").status_code == 200
+
+    lineup = client.get(f"/api/lineups/{lineup_id}").json()
+    suggestions = lineup["channels"][0]["mapping"]["suggestions"]
+    assert len(suggestions) == 2
+
+    top = next(s for s in suggestions if s["sdStationId"] == "10123")
+    assert top["stationName"] == "KGO-TV"
+    assert top["callsign"] == "KGO"
+
+    other = next(s for s in suggestions if s["sdStationId"] == "10456")
+    assert other["stationName"] == "FOX 5 New York"
+    assert other["callsign"] == "WNYW"
+
+
+def test_list_lineups_also_enriches_suggestions(client):
+    """`GET /api/lineups` drives the same suggestion-review UI as the
+    single-lineup fetch (see `SuggestionsPanel.tsx`'s re-fetch pattern) —
+    must get the same enrichment, not just `GET /api/lineups/{id}`."""
+    lineup_id, channel_id = create_lineup_with_channel(client)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        if request.url.path.endswith("/lineups/USA-OTA12345"):
+            return stations_response([kgo_station()])
+        raise AssertionError(f"unexpected path {request.url.path}")
+
+    override_sd_client_with(handler)
+    assert client.post(f"/api/lineups/{lineup_id}/suggestions").status_code == 200
+
+    lineups = client.get("/api/lineups").json()
+    lineup = next(l for l in lineups if l["id"] == lineup_id)
+    suggestion = lineup["channels"][0]["mapping"]["suggestions"][0]
+    assert suggestion["stationName"] == "KGO-TV"
+    assert suggestion["callsign"] == "KGO"
+
+
+def test_suggestion_with_logo_includes_logo_url_with_no_extra_sd_call(client):
+    """`SdStation.logo.URL` already comes back inline with
+    `get_lineup_stations` — no separate SD "get logos" call should ever be
+    made for this."""
+    lineup_id, channel_id = create_lineup_with_channel(client)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        if request.url.path.endswith("/lineups/USA-OTA12345"):
+            return httpx.Response(
+                200,
+                json={
+                    "map": [],
+                    "stations": [
+                        {
+                            "stationID": "10123",
+                            "name": "KGO-TV",
+                            "callsign": "KGO",
+                            "affiliate": "ABC",
+                            "logo": {"URL": "https://example.test/kgo-logo.png"},
+                        }
+                    ],
+                },
+            )
+        raise AssertionError(f"unexpected path {request.url.path}")
+
+    override_sd_client_with(handler)
+    assert client.post(f"/api/lineups/{lineup_id}/suggestions").status_code == 200
+
+    lineup = client.get(f"/api/lineups/{lineup_id}").json()
+    suggestion = lineup["channels"][0]["mapping"]["suggestions"][0]
+    assert suggestion["logoUrl"] == "https://example.test/kgo-logo.png"
+
+
+def test_suggestion_display_fields_none_when_station_not_in_cache(client, tmp_path):
+    """Cache evicted / SD lineup disassociated since the suggestion was
+    generated: enrichment must fall back to `None` display fields rather
+    than erroring, so the frontend can fall back to the raw id."""
+    lineup_id, channel_id = create_lineup_with_channel(client)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        if request.url.path.endswith("/lineups/USA-OTA12345"):
+            return stations_response([kgo_station(), fox_station()])
+        raise AssertionError(f"unexpected path {request.url.path}")
+
+    override_sd_client_with(handler)
+    assert client.post(f"/api/lineups/{lineup_id}/suggestions").status_code == 200
+
+    # Simulate the cache being evicted after suggestions were generated.
+    sd_cache.invalidate_lineup_stations("USA-OTA12345", base_dir=tmp_path)
+
+    response = client.get(f"/api/lineups/{lineup_id}")
+    assert response.status_code == 200
+    suggestions = response.json()["channels"][0]["mapping"]["suggestions"]
+    assert len(suggestions) == 2
+    for suggestion in suggestions:
+        assert suggestion["stationName"] is None
+        assert suggestion["callsign"] is None
+        assert suggestion["logoUrl"] is None
+        # The raw id is still present for the frontend's fallback display.
+        assert suggestion["sdStationId"] in {"10123", "10456"}
+
+
+def test_update_channel_response_is_enriched_without_a_follow_up_get(client):
+    """Follow-on review finding: `PUT /api/lineups/{lineup_id}/channels/
+    {channel_id}` must enrich suggestion display fields on *its own
+    response* (not just a subsequent `GET`) -- `ChannelRow.tsx`'s
+    `handleEditSubmit` replaces local channel state straight from this
+    response, so an unenriched response would make a pending suggestion's
+    name/call sign disappear from the UI until the next full page re-fetch."""
+    lineup_id, channel_id = create_lineup_with_channel(client)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        if request.url.path.endswith("/lineups/USA-OTA12345"):
+            return stations_response([kgo_station(), fox_station()])
+        raise AssertionError(f"unexpected path {request.url.path}")
+
+    override_sd_client_with(handler)
+    assert client.post(f"/api/lineups/{lineup_id}/suggestions").status_code == 200
+
+    response = client.put(
+        f"/api/lineups/{lineup_id}/channels/{channel_id}",
+        json={"name": "KGO-TV HD"},
+    )
+    assert response.status_code == 200
+    suggestions = response.json()["mapping"]["suggestions"]
+    assert len(suggestions) == 2
+    top = next(s for s in suggestions if s["sdStationId"] == "10123")
+    assert top["stationName"] == "KGO-TV"
+    assert top["callsign"] == "KGO"
+
+
+def test_enriched_display_fields_never_persisted_to_lineups_json(client, tmp_path):
+    """The enrichment must be response-only: the raw `config/lineups.json`
+    on disk must keep the minimal `{sdStationId, sdLineupId, score}` shape
+    documented in docs/data-model.md, even after a response has served the
+    enriched fields."""
+    lineup_id, channel_id = create_lineup_with_channel(client)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        if request.url.path.endswith("/lineups/USA-OTA12345"):
+            return stations_response([kgo_station(), fox_station()])
+        raise AssertionError(f"unexpected path {request.url.path}")
+
+    override_sd_client_with(handler)
+    assert client.post(f"/api/lineups/{lineup_id}/suggestions").status_code == 200
+
+    # Drive both enriched-read routes to make sure neither one's response
+    # construction leaks back into a write.
+    assert client.get(f"/api/lineups/{lineup_id}").status_code == 200
+    assert client.get("/api/lineups").status_code == 200
+
+    raw = json.loads((tmp_path / "config" / "lineups.json").read_text())
+    raw_lineup = next(l for l in raw["lineups"] if l["id"] == lineup_id)
+    raw_suggestions = raw_lineup["channels"][0]["mapping"]["suggestions"]
+    assert raw_suggestions  # sanity: suggestions were actually generated
+    for suggestion in raw_suggestions:
+        # The minimal documented shape's required fields are present...
+        assert suggestion["sdStationId"]
+        assert suggestion["sdLineupId"]
+        assert isinstance(suggestion["score"], (int, float))
+        # ...and the display-only enrichment fields (present as keys, since
+        # `MappingSuggestion` always declares them, but never *populated*
+        # by anything that writes back to `config/lineups.json` — see
+        # `models/lineup.py`'s `MappingSuggestion` docstring) are null on
+        # disk even though the two `GET` responses above served non-null
+        # values for these exact suggestions.
+        assert suggestion.get("stationName") is None
+        assert suggestion.get("callsign") is None
+        assert suggestion.get("logoUrl") is None

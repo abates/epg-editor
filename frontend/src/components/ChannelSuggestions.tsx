@@ -36,6 +36,19 @@ const StationId = styled.span`
   color: #444;
 `;
 
+const StationName = styled.span`
+  color: #222;
+`;
+
+const Logo = styled.img`
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 3px;
+  background: #fff;
+  border: 1px solid #ddd;
+`;
+
 interface ChannelSuggestionsProps {
   lineupId: string;
   channel: Channel;
@@ -116,9 +129,19 @@ export function ChannelSuggestions({ lineupId, channel, onChanged }: ChannelSugg
               <StatusBadge $tone={confidenceTone(suggestion.score)}>
                 {Math.floor(suggestion.score * 100)}%
               </StatusBadge>
-              <StationId>
-                station {suggestion.sdStationId} ({suggestion.sdLineupId})
-              </StationId>
+              {suggestion.logoUrl && (
+                <Logo src={suggestion.logoUrl} alt={suggestion.stationName ?? suggestion.callsign ?? 'Station logo'} />
+              )}
+              {suggestion.stationName ? (
+                <StationName>
+                  {suggestion.stationName}
+                  {suggestion.callsign ? ` (${suggestion.callsign})` : ''}
+                </StationName>
+              ) : (
+                <StationId>
+                  station {suggestion.sdStationId} ({suggestion.sdLineupId})
+                </StationId>
+              )}
               <Button type="button" disabled={busy} onClick={() => handleAccept(suggestion)}>
                 {acceptingKey === key ? 'Accepting...' : 'Accept'}
               </Button>

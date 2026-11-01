@@ -10,13 +10,22 @@ export type LineupSource = 'manual' | 'm3u';
 /**
  * A single candidate SD station suggested for a channel.
  *
- * Populated by the (not-yet-built, Phase 3) suggestion-scoring service;
- * `suggestions` arrays are empty until that lands.
+ * Populated by the suggestion-scoring service; `suggestions` arrays are
+ * empty until "Generate Suggestions" has been run for the lineup.
+ *
+ * `stationName`/`callsign`/`logoUrl` are enrichment fields populated from
+ * cached SchedulesDirect station data when available - they are `null`
+ * (not omitted) when that cache data isn't available (e.g. stale cache, a
+ * disassociated SD lineup). Callers must fall back to `sdStationId`/
+ * `sdLineupId` rather than assuming these are always present.
  */
 export interface MappingSuggestion {
   sdStationId: string;
   sdLineupId: string;
   score: number;
+  stationName: string | null;
+  callsign: string | null;
+  logoUrl: string | null;
 }
 
 /**

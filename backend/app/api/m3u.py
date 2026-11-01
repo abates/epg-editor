@@ -15,6 +15,7 @@ from app.models.lineup import Lineup
 from app.models.m3u import M3UEntry, M3UImportResult
 from app.services import lineups as lineups_service
 from app.services import m3u as m3u_service
+from app.services import suggestions as suggestions_service
 
 router = APIRouter(tags=["m3u"])
 
@@ -86,6 +87,12 @@ async def import_m3u_new_lineup(
     no channels, so every parsed entry comes back in `result.added`.
 
     400 if the upload is too large or isn't parseable as M3U at all.
+
+    A brand-new import's channels have no `mapping`/suggestions yet, so
+    enriching before returning is a no-op in practice today — applied
+    anyway for consistency with `import_m3u_existing_lineup` below and
+    every `Lineup`-returning route in `api/lineups.py` (see the
+    suggestion-enrichment follow-on review finding).
     """
     text = await _read_and_decode_upload(file)
     entries = _parse_or_400(text)
@@ -98,7 +105,9 @@ async def import_m3u_new_lineup(
     lineup, result = await run_in_threadpool(
         m3u_service.create_lineup_from_m3u, name, entries
     )
-    return M3UImportResponse(lineup=lineup, result=result)
+    return M3UImportResponse(
+        lineup=suggestions_service.enrich_lineup_suggestions(lineup), result=result
+    )
 
 
 @router.post("/lineups/{lineup_id}/import-m3u", response_model=M3UImportResponse)
@@ -116,6 +125,13 @@ async def import_m3u_existing_lineup(
     `"m3u"` (re-importing an M3U file into a manually-curated lineup is
     intentionally unsupported — see `app.services.m3u.import_m3u_entries`'s
     docstring).
+
+    A re-import preserves an existing channel's `mapping` (including any
+    pending `suggestions`) untouched on update, so this response can
+    legitimately carry stale-looking (but accurate) suggestion display data
+    for an unmapped channel — enriched before returning for the same
+    reason as every other `Lineup`-returning route (see the suggestion-
+    enrichment follow-on review finding).
     """
     text = await _read_and_decode_upload(file)
     entries = _parse_or_400(text)
@@ -131,4 +147,6 @@ async def import_m3u_existing_lineup(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except lineups_service.ValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return M3UImportResponse(lineup=lineup, result=result)
+    return M3UImportResponse(
+        lineup=suggestions_service.enrich_lineup_suggestions(lineup), result=result
+    )

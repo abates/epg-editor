@@ -33,14 +33,36 @@ NonEmptyName = Annotated[str, StringConstraints(strip_whitespace=True, min_lengt
 class MappingSuggestion(BaseModel):
     """A single candidate SD station suggested for a channel.
 
-    Populated by the (not-yet-built, Phase 3) suggestion-scoring service.
+    Populated by the suggestion-scoring service (`services/suggestions.py`).
     Recomputed wholesale each time suggestions are (re)run for a channel —
     never accumulated across runs.
+
+    `stationName`/`callsign`/`logoUrl` are **display-only, response-time
+    enrichment fields** — see `services.suggestions.enrich_lineup_suggestions`
+    (checkpoint 25's fix for "the suggestion review UI only shows a bare SD
+    station ID"). They default to `None` and are populated *only* by that
+    enrichment step, applied to a `Lineup` already loaded from storage,
+    right before it's returned from `GET /api/lineups` / `GET
+    /api/lineups/{lineup_id}`. Nothing that writes back to
+    `config/lineups.json` (`storage.lineups.update_lineups` and friends)
+    ever sees a non-`None` value here — `docs/data-model.md`'s persisted
+    `mapping.suggestions` shape stays the minimal
+    `{sdStationId, sdLineupId, score}` it documents. Added as fields on this
+    model (rather than a parallel API-only response model wrapping
+    `Lineup`/`Channel`/`ChannelMapping`) because `api/lineups.py`'s
+    `GET` routes already use `response_model=Lineup`/`list[Lineup]` directly
+    against service-returned domain objects — extending the domain model
+    with optional, always-defaulted-`None` fields is far less invasive than
+    introducing and threading a second parallel model hierarchy just for two
+    read endpoints.
     """
 
     sdStationId: str
     sdLineupId: str
     score: float
+    stationName: str | None = None
+    callsign: str | None = None
+    logoUrl: str | None = None
 
 
 class ChannelMapping(BaseModel):

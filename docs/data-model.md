@@ -96,6 +96,20 @@ Notes:
   rosters are fetched from SD and cached under `cache/sd/stations/` only on
   a cache miss, and only for SD lineups actually associated with the
   epg-editor lineup being scored (no speculative bulk-fetching).
+  **The three display-only fields below (`stationName`/`callsign`/
+  `logoUrl`) are present as keys in the persisted JSON (`MappingSuggestion`
+  always declares them) but always `null` on disk** — the meaningful
+  persisted shape is `{sdStationId, sdLineupId, score}` as shown above.
+  Every `api/lineups.py`/`api/m3u.py` route that returns a `Channel` or
+  `Lineup` additionally returns `stationName`/`callsign`/`logoUrl` populated
+  on each suggestion in the *response body only* — computed fresh at
+  request time from the cached SD station roster
+  (`services.suggestions.enrich_channel_suggestions`/
+  `enrich_lineup_suggestions`/`enrich_lineups_suggestions`) so the
+  suggestion-review UI can show a human-readable name/call sign instead of
+  a bare SD station ID, no matter which endpoint's response the frontend
+  used to update its local state. `config/lineups.json` is never written
+  with these three fields populated with real data.
 - Writes to this file must be atomic (write to a temp file + rename) since it's
   the one piece of state that must never be left partially written.
 - Atomicity of the file write alone isn't enough to prevent lost updates:
