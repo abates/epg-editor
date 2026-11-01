@@ -2,7 +2,7 @@ import styled from 'styled-components';
 import { Card } from '../styles/primitives';
 
 // Same amber warning tone used elsewhere for partial-failure/non-fatal
-// notices (see `SyncAndGeneratePanel`'s `WarningCard` and `StatusBadge`'s
+// notices (see `RefreshNowPanel`'s `WarningCard` and `StatusBadge`'s
 // `warning` tone) - reused here rather than inventing a new visual style.
 const WarningCard = styled(Card)`
   margin: 12px 0;

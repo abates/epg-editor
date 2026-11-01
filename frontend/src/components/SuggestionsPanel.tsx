@@ -50,7 +50,7 @@ interface SuggestionsPanelProps {
  * where a hand-rolled local merge could drift from the server's actual
  * state.
  *
- * Same double-click guard pattern as `SyncAndGeneratePanel`: a synchronous
+ * Same double-click guard pattern as `RefreshNowPanel`: a synchronous
  * ref, not just `disabled`, since the backend has no concurrency guard of
  * its own for either endpoint. Both actions share one guard/ref - they
  * both mutate the same channels' mapping state for this lineup, so running

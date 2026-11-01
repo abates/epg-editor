@@ -37,8 +37,8 @@ interface ReimportM3uPanelProps {
  * notes. Only rendered for `source === "m3u"` lineups by the caller; the
  * backend rejects this for manually-curated lineups with a 400.
  *
- * Mirrors `SyncAndGeneratePanel`'s pattern: a synchronous in-flight ref
- * guards against a double-submit slipping through before the `disabled`
+ * Mirrors `RefreshNowPanel`'s pattern: a synchronous in-flight ref guards
+ * against a double-submit slipping through before the `disabled`
  * attribute's re-render commits, and a one-time result panel is shown
  * after the request completes.
  *

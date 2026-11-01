@@ -24,10 +24,9 @@ interface ImportM3uFormProps {
  * just hands the created lineup + result up to the caller.
  *
  * `POST /api/lineups/import-m3u` is not idempotent - each call creates a
- * brand-new lineup - so, mirroring `SyncAndGeneratePanel`/
- * `ReimportM3uPanel`, a synchronous in-flight ref guards against a
- * double-submit slipping through before the `disabled` attribute's
- * re-render commits.
+ * brand-new lineup - so, mirroring `ReimportM3uPanel`/`RefreshNowPanel`, a
+ * synchronous in-flight ref guards against a double-submit slipping
+ * through before the `disabled` attribute's re-render commits.
  */
 export function ImportM3uForm({ onImported }: ImportM3uFormProps) {
   const [name, setName] = useState('');

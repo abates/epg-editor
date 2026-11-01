@@ -78,32 +78,6 @@ export interface Lineup {
   channels: Channel[];
 }
 
-/** A single station-scoped failure within an otherwise-successful sync. */
-export interface StationSyncError {
-  sdStationId: string;
-  message: string;
-}
-
-/**
- * Result of `POST /api/lineups/{lineupId}/sync-and-generate`: fetching
- * fresh SD schedule/program data for every confirmed-mapped channel in a
- * lineup, caching it, and regenerating the lineup's XMLTV output file.
- *
- * A 200 response doesn't guarantee every station succeeded -
- * `stationErrors`/`errors` can be non-empty alongside non-zero success
- * counts (partial failure), so callers should surface both rather than
- * treating a 200 as unconditional success.
- */
-export interface SyncResult {
-  lineupId: string;
-  stationsSynced: number;
-  scheduleDaysFetched: number;
-  programsFetched: number;
-  channelsGenerated: number;
-  stationErrors: StationSyncError[];
-  errors: string[];
-}
-
 /**
  * Outcome of merging parsed M3U entries into an epg-editor lineup, returned
  * by both `POST /api/lineups/import-m3u` (brand-new lineup) and
@@ -239,4 +213,54 @@ export interface SdAccountLineupLimit {
   maxLineups: number | null;
   lineupsUsed: number;
   deletedLineupCount: number;
+}
+
+// --- Global refresh pipeline (`/api/refresh-now`) -----------------------
+//
+// Mirrors `backend/app/models/refresh.py`'s `RefreshResult`/`RefreshError`.
+// Deliberately a separate, all-lineups result shape from the removed
+// per-lineup `sync-and-generate` mechanism - this one runs across every
+// epg-editor lineup in a single call, not just one. See
+// `frontend/src/api/refresh.js` and `components/RefreshNowPanel.tsx`.
+
+/** What a `RefreshError` is scoped to. */
+export type RefreshErrorScope = 'account' | 'sd_lineup' | 'lineup' | 'station' | 'programs';
+
+/**
+ * One failure recorded during a `POST /api/refresh-now` run. `id` is the
+ * relevant SD lineup id / epg-editor lineup id / SD station id for scopes
+ * that have one; `null` for `scope: "account"` and `scope: "programs"`
+ * (not tied to one specific id).
+ */
+export interface RefreshError {
+  scope: RefreshErrorScope;
+  id: string | null;
+  message: string;
+}
+
+/**
+ * Response body for `POST /api/refresh-now`: the outcome of one run of the
+ * global refresh pipeline across every epg-editor lineup (station roster
+ * refresh, schedule/program fetch with the md5-based "skip unchanged"
+ * optimization, and XMLTV regeneration).
+ *
+ * Produced identically by this manual trigger and the APScheduler job that
+ * runs the same pipeline on a timer (`EPG_EDITOR_REFRESH_INTERVAL` hours) -
+ * triggering this does not reset or otherwise affect that schedule.
+ *
+ * A 200 response doesn't guarantee every step succeeded - `errors` can be
+ * non-empty alongside non-zero success counts (partial failure at the
+ * account/SD-lineup/lineup/station/programs level), so callers should
+ * surface both rather than treating a 200 as unconditional success.
+ */
+export interface RefreshResult {
+  lineupsProcessed: number;
+  lineupsRegenerated: number;
+  stationRostersRefreshed: number;
+  stationRostersSkipped: number;
+  scheduleDaysChecked: number;
+  scheduleDaysRefetched: number;
+  scheduleDaysSkippedUnchanged: number;
+  programsFetched: number;
+  errors: RefreshError[];
 }

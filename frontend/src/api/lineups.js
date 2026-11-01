@@ -169,30 +169,6 @@ export function setChannelMapping(lineupId, channelId, { sdStationId, sdLineupId
 }
 
 /**
- * Calls POST /api/lineups/{lineupId}/sync-and-generate: fetches fresh
- * schedule/program data from SchedulesDirect for every confirmed-mapped
- * channel in the lineup, caches it, and regenerates the lineup's XMLTV
- * output file (served at `/xmltv/{lineupId}.xml`).
- *
- * This is a slow, real-network call against the SD API (seconds to tens
- * of seconds) and the backend has no guard against two overlapping calls
- * for the same lineup - callers are responsible for not firing a second
- * request while one is still pending (see `SyncAndGeneratePanel`).
- *
- * Rejects with the extracted `detail` message (via `extractErrorDetail`)
- * for the backend's documented error cases: 404 (lineup doesn't exist),
- * 503 (SD credentials not configured), 502 (SD rejected the request).
- *
- * @param {string} lineupId
- * @returns {Promise<unknown>} the `SyncResult`.
- */
-export function syncAndGenerate(lineupId) {
-  return request(`/api/lineups/${encodeURIComponent(lineupId)}/sync-and-generate`, {
-    method: 'POST',
-  });
-}
-
-/**
  * Calls POST /api/lineups/{lineupId}/suggestions: (re)scores candidate SD
  * stations - from the deduped union of the lineup's associated
  * `sdLineupIds` - against every channel in the lineup, and overwrites each

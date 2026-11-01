@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import styled from 'styled-components';
 import { createLineup, deleteLineup, listLineups } from '../api/lineups.js';
 import { ImportM3uForm } from '../components/ImportM3uForm';
+import { RefreshNowPanel } from '../components/RefreshNowPanel';
 import { UnidentifiedEntriesWarning } from '../components/UnidentifiedEntriesWarning';
 import type { Lineup, M3UImportResult } from '../types';
 import {
@@ -88,8 +89,10 @@ interface LineupsListPageProps {
 /**
  * Top-level lineups list: shows existing lineups (name links through to
  * the detail view), a form to create a new, empty, manually-sourced
- * lineup, and a form to create a new `m3u`-sourced lineup by uploading an
- * M3U playlist (`ImportM3uForm`).
+ * lineup, a form to create a new `m3u`-sourced lineup by uploading an
+ * M3U playlist (`ImportM3uForm`), and the global "Refresh Now" trigger
+ * (`RefreshNowPanel`) - this page, not a single lineup's detail page, is
+ * where that lives since it runs across every lineup, not just one.
  */
 export function LineupsListPage({ onSelectLineup }: LineupsListPageProps) {
   const [state, setState] = useState<ListState>({ status: 'loading' });
@@ -181,6 +184,9 @@ export function LineupsListPage({ onSelectLineup }: LineupsListPageProps) {
   return (
     <Page>
       <SectionTitle>Lineups</SectionTitle>
+
+      <SubsectionTitle>Refresh</SubsectionTitle>
+      <RefreshNowPanel />
 
       {state.status === 'loading' && <p>Loading lineups...</p>}
       {state.status === 'error' && (
