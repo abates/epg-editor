@@ -194,3 +194,49 @@ export interface BulkAcceptResult {
   confirmedCount: number;
   confirmed: ConfirmedSuggestion[];
 }
+
+// --- SchedulesDirect account lineups (`/api/sd-account/*`) --------------
+//
+// These mirror `backend/app/models/sd.py`'s `SdLineupSummary`/
+// `SdAddRemoveLineupResponse` and `backend/app/models/sd_account.py`'s
+// `SdAccountLineupLimit` - the user's real SD *account* lineups (SD's own
+// headend subscriptions), entirely distinct from epg-editor's own `Lineup`
+// above. See `frontend/src/api/sdAccount.js`.
+
+/** One of the user's subscribed SD account lineups. */
+export interface SdAccountLineup {
+  lineup: string;
+  name: string;
+  transport: string | null;
+  location: string | null;
+  uri: string | null;
+}
+
+/**
+ * Response from `POST /api/sd-account/lineups` or
+ * `DELETE /api/sd-account/lineups/{lineupId}` - SD's raw add/remove
+ * confirmation shape. Only `message` (when present) is generally worth
+ * surfacing to the user; a generic success message is a fine fallback.
+ */
+export interface SdAddRemoveLineupResponse {
+  response: string | null;
+  code: number;
+  serverID: string | null;
+  message: string | null;
+  changesRemaining: number | null;
+  datetime: string | null;
+}
+
+/**
+ * The account's lineup-slot usage, from `GET /api/sd-account/limit`.
+ *
+ * `maxLineups` is `null` if SD's `/status` response didn't include it -
+ * treat that as "limit unknown," not as zero/unlimited. `lineupsUsed`
+ * conservatively includes lineups SD has marked `isDeleted` on their side;
+ * `deletedLineupCount` says how many of that total are in that state.
+ */
+export interface SdAccountLineupLimit {
+  maxLineups: number | null;
+  lineupsUsed: number;
+  deletedLineupCount: number;
+}

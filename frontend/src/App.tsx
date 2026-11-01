@@ -4,6 +4,7 @@ import { GlobalStyle } from './styles/GlobalStyle';
 import { HealthCheckPage } from './pages/HealthCheckPage';
 import { LineupsListPage } from './pages/LineupsListPage';
 import { LineupDetailPage } from './pages/LineupDetailPage';
+import { SdAccountPage } from './pages/SdAccountPage';
 
 const Nav = styled.nav`
   display: flex;
@@ -29,11 +30,11 @@ const NavButton = styled.button<{ $active: boolean }>`
   }
 `;
 
-type Section = 'lineups' | 'health';
+type Section = 'lineups' | 'sd-account' | 'health';
 
 /**
  * Top-level navigation. There's no router dependency decision locked in
- * yet (see CLAUDE.md), and at this scope - two top-level sections, plus a
+ * yet (see CLAUDE.md), and at this scope - three top-level sections, plus a
  * lineups-list/lineup-detail toggle - plain local state is enough; a
  * router would be adding a dependency for navigation this app doesn't
  * structurally need yet.
@@ -56,6 +57,13 @@ function App() {
         </NavButton>
         <NavButton
           type="button"
+          $active={section === 'sd-account'}
+          onClick={() => setSection('sd-account')}
+        >
+          SD account
+        </NavButton>
+        <NavButton
+          type="button"
           $active={section === 'health'}
           onClick={() => setSection('health')}
         >
@@ -64,6 +72,7 @@ function App() {
       </Nav>
 
       {section === 'health' && <HealthCheckPage />}
+      {section === 'sd-account' && <SdAccountPage />}
       {section === 'lineups' &&
         (selectedLineupId ? (
           <LineupDetailPage

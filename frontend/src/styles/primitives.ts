@@ -138,3 +138,13 @@ export const HelperText = styled.p`
   font-size: 13px;
   margin: 4px 0 0;
 `;
+
+export const StrongWarningText = styled.p`
+  color: #ffffff;
+  background: #a31515;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+`;
