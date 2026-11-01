@@ -1,0 +1,31 @@
+[project]
+name = "epg-editor-backend"
+version = "0.1.0"
+description = "epg-editor backend: FastAPI app, SchedulesDirect client, storage, and scheduler."
+authors = [
+    { name = "Andrew Bates", email = "358901+abates@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "apscheduler>=3.10,<4",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8.3",
+]
+
+[tool.uv.build-backend]
+module-name = "app"
+module-root = ""
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["uv_build>=0.11.8,<0.12.0"]
+build-backend = "uv_build"
