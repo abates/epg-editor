@@ -172,6 +172,89 @@ def test_add_account_lineup_raises_on_sd_error_code():
         run(client.add_account_lineup("USA-OTA12345"))
 
 
+def test_get_account_status():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        assert request.url.path.endswith("/status")
+        assert request.headers["token"] == FAKE_TOKEN
+        return httpx.Response(
+            200,
+            json={
+                "code": 0,
+                "account": {
+                    "expires": "2027-08-30T22:16:29Z",
+                    "messages": [],
+                    "maxLineups": 4,
+                },
+                "lineups": [
+                    {
+                        "lineup": "USA-OTA12345",
+                        "modified": "2015-04-11T21:30:27Z",
+                        "uri": "/20141201/lineups/USA-OTA12345",
+                    },
+                    {
+                        "lineup": "USA-WI61859-DEFAULT",
+                        "modified": "1970-01-01T00:00:00Z",
+                        "isDeleted": True,
+                    },
+                ],
+                "lastDataUpdate": "2015-04-17T03:36:24Z",
+            },
+        )
+
+    client = make_client(handler)
+    result = run(client.get_account_status())
+
+    assert result.account is not None
+    assert result.account.maxLineups == 4
+    assert len(result.lineups) == 2
+    assert result.lineups[1].isDeleted is True
+
+
+def test_list_account_lineups_raises_on_sd_error_code():
+    """An error-coded HTTP 200 body on `/lineups` (not just a token
+    failure) must raise, not validate as a success with zero lineups —
+    every field on `SdAccountLineupsResponse` is optional so it would
+    otherwise pass validation silently."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        assert request.url.path.endswith("/lineups")
+        return httpx.Response(
+            200, json={"code": 4003, "response": "INVALID_USER"}
+        )
+
+    client = make_client(handler)
+
+    with pytest.raises(SdClientError) as excinfo:
+        run(client.list_account_lineups())
+
+    assert excinfo.value.sd_code == 4003
+
+
+def test_get_account_status_raises_on_sd_error_code():
+    """Same scenario against `/status` — the reviewer's exact repro: an
+    error-coded 200 response must not come back as
+    `maxLineups=None, lineups=[]` as if that were a real (empty) answer."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return token_response(request)
+        assert request.url.path.endswith("/status")
+        return httpx.Response(
+            200, json={"code": 4003, "response": "INVALID_USER"}
+        )
+
+    client = make_client(handler)
+
+    with pytest.raises(SdClientError) as excinfo:
+        run(client.get_account_status())
+
+    assert excinfo.value.sd_code == 4003
+
+
 def test_get_lineup_stations():
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/token"):

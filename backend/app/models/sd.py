@@ -71,9 +71,18 @@ class SdLineupSummary(SdModel):
 
 
 class SdAccountLineupsResponse(SdModel):
-    """Response from `GET /lineups` (the account's subscribed lineups)."""
+    """Response from `GET /lineups` (the account's subscribed lineups).
+
+    `response`/`message` are only populated when SD returns an account-level
+    error instead of a real lineups list (e.g.
+    `{"code": 4003, "response": "ACCOUNT_LOCKOUT"}`) — see
+    `SdClient.list_account_lineups`, which checks `code` explicitly rather
+    than letting an error body validate as "zero lineups."
+    """
 
     code: int | None = None
+    response: str | None = None
+    message: str | None = None
     serverID: str | None = None
     datetime: dt.datetime | None = None
     lineups: list[SdLineupSummary] = Field(default_factory=list)
@@ -88,6 +97,67 @@ class SdAddRemoveLineupResponse(SdModel):
     message: str | None = None
     changesRemaining: int | None = None
     datetime: dt.datetime | None = None
+
+
+# --- Account status -----------------------------------------------------------
+
+
+class SdAccountStatusInfo(SdModel):
+    """The `account` object nested within `GET /status`.
+
+    `maxLineups` is the account-wide total number of lineup slots allowed
+    (verified against SchedulesDirect/JSON-Service's wiki, "Getting
+    status" section — https://github.com/SchedulesDirect/JSON-Service/wiki/API-20141201,
+    fetched during implementation) — this is the account's total slot
+    *limit*, not `SdAddRemoveLineupResponse.changesRemaining` (a separate,
+    decrementing "lineup changes remaining" counter that rate-limits
+    add/remove *operations*, not the number of lineups the account may
+    hold at once).
+    """
+
+    expires: dt.datetime | None = None
+    messages: list[dict[str, object]] = Field(default_factory=list)
+    maxLineups: int | None = None
+
+
+class SdStatusLineupSummary(SdModel):
+    """One entry in `GET /status`'s `lineups` array.
+
+    Deliberately a separate model from `SdLineupSummary` (`GET /lineups`'s
+    shape): per SD's docs this array's entries carry `modified`/
+    `isDeleted` rather than `name`/`transport`/`location`.
+    """
+
+    lineup: str | None = None
+    modified: dt.datetime | None = None
+    uri: str | None = None
+    isDeleted: bool | None = None
+
+
+class SdStatusResponse(SdModel):
+    """Response from `GET /status`.
+
+    Used by `services/sd_account.py` to compute the account's lineup-slot
+    usage (`account.maxLineups` vs. the count of entries in `lineups` — see
+    that module for why *every* entry counts, `isDeleted` or not) without
+    needing a separate `GET /lineups` call — see
+    `SdClient.get_account_status`.
+
+    `response`/`message` are only populated when SD returns an account-level
+    error instead of real status data (e.g.
+    `{"code": 4003, "response": "ACCOUNT_LOCKOUT"}`) — `SdClient
+    .get_account_status` checks `code` explicitly rather than letting an
+    error body validate as an under-populated "no data" result.
+    """
+
+    code: int | None = None
+    response: str | None = None
+    message: str | None = None
+    serverID: str | None = None
+    datetime: dt.datetime | None = None
+    account: SdAccountStatusInfo | None = None
+    lineups: list[SdStatusLineupSummary] = Field(default_factory=list)
+    lastDataUpdate: dt.datetime | None = None
 
 
 # --- Lineup stations ---------------------------------------------------------

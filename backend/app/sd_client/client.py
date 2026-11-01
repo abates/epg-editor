@@ -44,6 +44,7 @@ from app.models.sd import (
     SdProgram,
     SdScheduleRequest,
     SdStationSchedule,
+    SdStatusResponse,
     SdTokenResponse,
 )
 
@@ -256,11 +257,25 @@ class SdClient:
         return {"token": await self.get_token()}
 
     async def list_account_lineups(self) -> SdAccountLineupsResponse:
-        """`GET /lineups` — the account's currently-subscribed SD lineups."""
+        """`GET /lineups` — the account's currently-subscribed SD lineups.
+
+        SD can return HTTP 200 with an error payload (e.g.
+        `{"code": 4003, "response": "ACCOUNT_LOCKOUT"}`) for an account-level
+        failure. Every field on `SdAccountLineupsResponse` is optional, so
+        that would otherwise validate cleanly as "zero lineups" instead of
+        surfacing the error — explicitly check `code` the same way
+        `add_account_lineup`/`remove_account_lineup` already do.
+        """
         response = await self._request(
             "GET", f"{self._base_url}/lineups", headers=await self._auth_headers()
         )
-        return self._validate(SdAccountLineupsResponse, self._decode_json(response))
+        parsed = self._validate(SdAccountLineupsResponse, self._decode_json(response))
+        if parsed.code not in (0, None):
+            raise SdClientError(
+                parsed.message or parsed.response or "SD account lineups request failed",
+                sd_code=parsed.code,
+            )
+        return parsed
 
     async def add_account_lineup(self, lineup_id: str) -> SdAddRemoveLineupResponse:
         """`PUT /lineups/{lineupID}` — subscribe the account to a lineup."""
@@ -283,6 +298,33 @@ class SdClient:
         if parsed.code != 0:
             raise SdClientError(
                 parsed.message or "remove lineup failed", sd_code=parsed.code
+            )
+        return parsed
+
+    async def get_account_status(self) -> SdStatusResponse:
+        """`GET /status` — account info, including the account-wide lineup-
+        slot limit (`account.maxLineups`).
+
+        Verified against SchedulesDirect/JSON-Service's wiki ("Getting
+        status" section of API-20141201.md) during implementation — see
+        `SdAccountStatusInfo`'s docstring for the distinction from
+        `SdAddRemoveLineupResponse.changesRemaining`.
+
+        Like `list_account_lineups`, SD can return HTTP 200 with an
+        error-coded body (every field on `SdStatusResponse` is optional, so
+        that would otherwise validate as an under-populated "no data"
+        result — e.g. `maxLineups=None, lineups=[]` — rather than raising).
+        Explicitly check `code` so that case surfaces as an `SdClientError`
+        instead.
+        """
+        response = await self._request(
+            "GET", f"{self._base_url}/status", headers=await self._auth_headers()
+        )
+        parsed = self._validate(SdStatusResponse, self._decode_json(response))
+        if parsed.code not in (0, None):
+            raise SdClientError(
+                parsed.message or parsed.response or "SD account status request failed",
+                sd_code=parsed.code,
             )
         return parsed
 
