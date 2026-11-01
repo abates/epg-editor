@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import health, lineups, m3u, sync, xmltv
+from app.api import health, lineups, m3u, suggestions, sync, xmltv
 from app.storage.paths import ensure_data_dirs
 
 
@@ -29,6 +29,7 @@ def create_app() -> FastAPI:
     app.include_router(lineups.router, prefix="/api")
     app.include_router(m3u.router, prefix="/api")
     app.include_router(sync.router, prefix="/api")
+    app.include_router(suggestions.router, prefix="/api")
     # `/xmltv/*` is its own reserved top-level prefix (see CLAUDE.md's
     # "Reserved URL path prefixes") — registered directly on the app, not
     # nested under `/api`.

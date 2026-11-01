@@ -95,10 +95,24 @@ performed by Andrew against his real account.
     Andrew for confirmation before locking in (open decision per CLAUDE.md).
 21. **Suggestion generation service** (`backend-developer`) — candidate pool
     = union of stations across a lineup's `sdLineupIds`; score on
-    name/call sign/alt names; populate `mapping.suggestions` (recomputed,
-    not accumulated).
+    name/call sign/affiliate (via `rapidfuzz`'s `WRatio`); populate
+    `mapping.suggestions` (recomputed, not accumulated). Done: confirmed
+    `rapidfuzz` + `WRatio` per item 20's evaluation.
 22. **Bulk-accept** (`backend-developer`) — accept all suggestions ≥ fixed
-    backend threshold (start at 0.85 — not a UI control).
+    backend threshold (not a UI control). Done: started at **0.92**. This
+    isn't a tuned "just above a known false-positive score" cutoff — a
+    Phase 3 benchmark confirmed `WRatio` caps a *partial* (non-exact) match
+    at roughly 0.90 when the two strings differ substantially in length
+    after normalization (e.g. a bare callsign vs. a fuller display name),
+    regardless of whether it's a genuine match or a same-affiliate false
+    positive, so the two aren't distinguishable at that score level by this
+    metric alone. When the strings are closer in length, though, a
+    word-reordered or word-subset match can score up to ~0.95 and clear
+    0.92. So 0.92 restricts bulk-accept to near-exact full-string matches
+    *plus* some genuine similar-length non-exact matches, while deliberately
+    excluding the substantially-different-length partial matches as a
+    conservative starting point. Still just a starting value; real tuning
+    happens at checkpoint 25.
 23. **Frontend: suggestion review UI** (`frontend-developer`) — per-channel
     accept/reject, bulk-accept action, confidence display.
 24. **Review** (`peer-reviewer`).
@@ -107,10 +121,19 @@ performed by Andrew against his real account.
     What to do: run suggestion generation against one of your real SD
     lineups and review the actual suggestions and scores produced for your
     real channels (not synthetic test data).
-    Confirmed means: you're satisfied the 0.85 bulk-accept threshold is
-    neither accepting bad matches nor requiring manual review of obviously
-    correct ones for your real lineup. Adjust the fixed default if not, then
-    re-review.
+    Go in expecting this: because 0.92 mostly bulk-accepts near-exact
+    full-string matches, plus some similar-length word-reordered/subset
+    matches (see item 22), bulk-accept is likely to confirm relatively few
+    of your real channels — most real HDHomeRun-style names (e.g.
+    "KGO-HD") won't exact-match or closely length-match a station's
+    name/callsign/affiliate. That's the intended conservative starting
+    point, not a bug; this checkpoint is exactly where real tuning (a lower
+    threshold, a better signal, etc.) happens based on what you actually
+    see.
+    Confirmed means: you're satisfied with the bulk-accept behavior for
+    your real lineup — whether that means keeping 0.92, adjusting it, or
+    deciding a different signal is needed. Adjust the fixed default if
+    warranted, then re-review.
     Development does not continue past this point until you confirm.
 
 ## Phase 4 — SD account lineup management UI
@@ -131,7 +154,14 @@ performed by Andrew against his real account.
 
 29. **Scheduler jobs** (`backend-developer`) — `scheduler/`: APScheduler job
     refreshing cached SD data (via md5 hashes to skip unchanged schedules)
-    and regenerating XMLTV; thin jobs calling into `services/`.
+    and regenerating XMLTV; thin jobs calling into `services/`. Scope
+    explicitly includes refreshing cached SD lineup station rosters
+    (`storage/sd_cache.py`'s `invalidate_lineup_stations`) — Phase 3's
+    suggestion-generation service (item 21) caches a lineup's station
+    list on first fetch with no TTL/expiry of its own, by design (that
+    staleness problem was flagged during Phase 3 review as squarely this
+    phase's job, same as schedule/program refresh, not something to
+    solve ad hoc in item 21).
 30. **Manual "refresh now"** (`backend-developer` + `frontend-developer`) —
     API endpoint running the same pipeline on demand, triggered from the UI.
 31. **Decide refresh interval + env var name** (`backend-developer`) —

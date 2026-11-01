@@ -148,15 +148,44 @@ Dependency direction: `api/` and `scheduler/` → `services/` → `sd_client/` +
    over-the-air lineup plus a cable lineup).
 4. **Map channels.** For each epg-editor channel, suggest candidate SD
    stations from the associated SD lineup(s) using fuzzy matching on
-   name/call sign (candidate library: `rapidfuzz` — confirm/evaluate before
-   locking in, per the user's library-selection preference). Each suggestion
-   carries a confidence score. The user can:
+   name/call sign **and affiliate** (e.g. "FOX", "NBC" — several genuine
+   matches share zero literal text with the station's `name` but do match
+   its `affiliate`, e.g. "FOX 5" vs callsign "WNYW", affiliate "FOX").
+   Candidate library: `rapidfuzz` (`fuzz.WRatio` with
+   `rapidfuzz.utils.default_process`, confirmed during Phase 3 implementation
+   — see `backend/app/services/suggestions.py`). Each suggestion carries a
+   confidence score. The user can:
    - Accept/reject suggestions individually.
    - **Bulk-accept** all suggestions at or above a confidence threshold. The
-     threshold is a **fixed backend default (not a UI control)** — pick a
-     starting value (e.g. `0.85`) and tune it during implementation based on
-     real matching results; exposing it as a user-adjustable setting is not
-     in scope.
+     threshold is a **fixed backend default (not a UI control)**:
+     **`0.92`** (0-1 scale). `rapidfuzz.fuzz.WRatio` applies roughly a 0.9
+     multiplier to the top score of a *partial* (non-exact) string match
+     when the two strings differ substantially in length after
+     normalization (roughly 1.5x or more) — e.g. a bare callsign vs. a
+     fuller display name. That ~0.90 ceiling is a structural property of
+     the scoring function itself, not a signal that distinguishes a genuine
+     match from a false positive: a "FOX 5"-named channel scores exactly
+     `0.90` against both a genuine longer match like "FOX 5 New York" and a
+     different-market station that only shares the "FOX" affiliate, and the
+     two are indistinguishable at that level by this metric alone. When the
+     two strings are closer in length, though, a word-reordered or
+     word-subset match can score higher still — e.g. "NBC Bay Area" vs.
+     "Bay Area NBC" scores `0.95` — so the ~0.90 ceiling only applies to the
+     substantially-different-length case, not to partial matches generally.
+     `0.92` sits just above that ceiling, so bulk-accept fires on near-exact
+     (post-normalization) full-string matches *and* on some genuine
+     similar-length word-reordered/subset matches, while deliberately
+     excluding the substantially-different-length partial matches — good or
+     bad alike — rather than trying to separate them at a score level where
+     they can't be told apart. In practice this means bulk-accept is
+     expected to confirm relatively little against real lineups (most real
+     channel names, e.g. "KGO-HD", won't exact-match or closely length-match
+     a station's name/callsign/affiliate) — that's intentional starting
+     caution, not a bug; real tuning happens at checkpoint 25. See
+     `BULK_ACCEPT_THRESHOLD` in `backend/app/services/suggestions.py` for
+     the full reasoning; exposing it as a user-adjustable setting is still
+     not in scope (confirm/adjust at checkpoint 25 if real lineup results
+     warrant it).
 5. **Generate XMLTV.** For every channel with a confirmed mapping, pull cached
    SD schedule/program data and emit a valid XMLTV document. Default to one
    XMLTV file per epg-editor lineup (Plex/Jellyfin each typically point at one

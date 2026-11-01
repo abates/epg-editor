@@ -76,7 +76,26 @@ Notes:
   `confirmed: false` with `suggestions` populated is the "needs review" state
   the UI's bulk-accept flow operates on.
 - `suggestions` are recomputed (not accumulated) each time mapping suggestions
-  are (re)run for a channel.
+  are (re)run for a channel. Recomputed for *every* channel in the lineup,
+  including ones with an already-`confirmed` mapping — recomputation only
+  ever replaces this `suggestions` list (a read-only "what else was
+  considered" record for the UI); it never touches `sdStationId`/
+  `confirmed`/`confirmedAt`, so a confirmed mapping can't be silently
+  changed by a later suggestion run. Capped at the top 5 highest-scoring
+  candidates per channel (`MAX_SUGGESTIONS_PER_CHANNEL` in
+  `backend/app/services/suggestions.py`) rather than every candidate in the
+  pool, since a cable SD lineup's station roster can run into the hundreds.
+  Scored via `rapidfuzz.fuzz.WRatio` (with `rapidfuzz.utils.default_process`)
+  against each candidate station's `name`, `callsign`, *and* `affiliate`,
+  taking the max across the three and normalizing `WRatio`'s 0-100 output to
+  this field's 0-1 scale — see that module for the full scoring/threshold
+  rationale (including why a channel's `tvgId` is deliberately *not* used
+  as an additional matching signal). The candidate pool for a given
+  epg-editor lineup is the deduped (by `stationID`) union of cached
+  stations across every SD lineup in that lineup's `sdLineupIds`; station
+  rosters are fetched from SD and cached under `cache/sd/stations/` only on
+  a cache miss, and only for SD lineups actually associated with the
+  epg-editor lineup being scored (no speculative bulk-fetching).
 - Writes to this file must be atomic (write to a temp file + rename) since it's
   the one piece of state that must never be left partially written.
 - Atomicity of the file write alone isn't enough to prevent lost updates:

@@ -49,8 +49,8 @@ SD throttles and expects well-behaved clients to cache. Concretely:
 When computing suggestions for a channel, the candidate station pool is the
 union of stations across the epg-editor lineup's associated `sdLineupIds`
 (cached locally, not re-fetched per suggestion run). Match on station name,
-call sign, and (if present) any SD-provided alternate names — see
-`docs/data-model.md` for where results are stored (`mapping.suggestions`).
+call sign, and affiliate — see `docs/data-model.md` for where results are
+stored (`mapping.suggestions`).
 
 ## XMLTV generation inputs
 
