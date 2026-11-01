@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import health
+from app.api import health, lineups, xmltv
 from app.storage.paths import ensure_data_dirs
 
 
@@ -26,6 +26,11 @@ def create_app() -> FastAPI:
     """Build the FastAPI application."""
     app = FastAPI(title="epg-editor", lifespan=lifespan)
     app.include_router(health.router, prefix="/api")
+    app.include_router(lineups.router, prefix="/api")
+    # `/xmltv/*` is its own reserved top-level prefix (see CLAUDE.md's
+    # "Reserved URL path prefixes") — registered directly on the app, not
+    # nested under `/api`.
+    app.include_router(xmltv.router)
     return app
 
 

@@ -63,6 +63,14 @@ Notes:
   are (re)run for a channel.
 - Writes to this file must be atomic (write to a temp file + rename) since it's
   the one piece of state that must never be left partially written.
+- Atomicity of the file write alone isn't enough to prevent lost updates:
+  FastAPI runs sync route handlers in a threadpool, so two concurrent
+  mutations (e.g. two "add channel" requests) that each do their own
+  load -> mutate -> save can race and silently drop one of them even
+  though each individual write is atomic. `storage/lineups.py` closes this
+  with `update_lineups()`, which holds a process-wide lock across the full
+  load-mutate-save cycle; every mutation in `services/lineups.py` goes
+  through it rather than calling `load_lineups`/`save_lineups` directly.
 
 ## `/data/cache/sd/`
 

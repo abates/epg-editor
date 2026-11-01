@@ -18,6 +18,24 @@ Ships as a single Docker image intended to be added to an existing
 [`docker-compose.example.yml`](docker-compose.example.yml) for the required
 volume mount and environment variables.
 
+## Development
+
+Backend (FastAPI via `uv`):
+
+```bash
+source .env
+cd backend
+uv sync
+uv run uvicorn app.main:app --reload --port 8080
+```
+
+The dev server must run on port 8080 — the frontend's Vite dev-proxy
+(`frontend/vite.config.ts`) and the devcontainer's forwarded ports both
+assume the backend is reachable at `:8080`. `uvicorn` defaults to port 8000
+if `--port` is omitted, so don't drop that flag in dev.
+
+Frontend (Vite + npm) — see [`frontend/README.md`](frontend/README.md).
+
 ## Configuration
 
 | Variable | Required | Description |
