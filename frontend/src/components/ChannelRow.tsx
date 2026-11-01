@@ -5,6 +5,7 @@ import type { Channel } from '../types';
 import { ChannelFieldsForm } from './ChannelFieldsForm';
 import { toChannelRequestBody, type ChannelFieldValues } from './channelFormValues';
 import { ChannelMappingForm } from './ChannelMappingForm';
+import { ChannelSuggestions } from './ChannelSuggestions';
 import { MappingStatusBadge } from './MappingStatusBadge';
 import { StatusBadge } from './StatusBadge';
 import { Card, DangerButton, ErrorText, FormActions, SecondaryButton } from '../styles/primitives';
@@ -130,6 +131,8 @@ export function ChannelRow({ lineupId, channel, sdLineupIds, onChanged, onRemove
           {channel.mapping.confirmedAt ? ` (confirmed ${channel.mapping.confirmedAt})` : ''}
         </MappingSummary>
       )}
+
+      <ChannelSuggestions lineupId={lineupId} channel={channel} onChanged={onChanged} />
 
       {deleteError && <ErrorText>{deleteError}</ErrorText>}
 

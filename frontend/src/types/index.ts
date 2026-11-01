@@ -130,3 +130,58 @@ export interface M3UImportResponse {
   lineup: Lineup;
   result: M3UImportResult;
 }
+
+/**
+ * How many candidate suggestions were (re)computed for one channel by a
+ * `POST /api/lineups/{lineupId}/suggestions` run. Capped at the backend's
+ * `MAX_SUGGESTIONS_PER_CHANNEL` (5) even when the candidate station pool is
+ * larger - see `docs/data-model.md`'s `suggestions` notes.
+ */
+export interface ChannelSuggestionCount {
+  channelId: string;
+  suggestionCount: number;
+}
+
+/**
+ * Response body for `POST /api/lineups/{lineupId}/suggestions`.
+ *
+ * Deliberately does NOT include the actual suggestions - those are written
+ * onto each channel's own `mapping.suggestions` field (recomputed, not
+ * accumulated), so callers must re-fetch the lineup (`getLineup`) after a
+ * successful call to see them reflected.
+ */
+export interface SuggestionResult {
+  lineupId: string;
+  /** Size of the deduped candidate station pool across the lineup's `sdLineupIds`. */
+  stationPoolSize: number;
+  /** Number of channels in the lineup that suggestions were (re)computed for. */
+  channelsScored: number;
+  channelSuggestionCounts: ChannelSuggestionCount[];
+}
+
+/** One channel that `POST /api/lineups/{lineupId}/bulk-accept-suggestions` auto-confirmed. */
+export interface ConfirmedSuggestion {
+  channelId: string;
+  sdStationId: string;
+  sdLineupId: string;
+  score: number;
+}
+
+/**
+ * Response body for `POST /api/lineups/{lineupId}/bulk-accept-suggestions`.
+ *
+ * `threshold` is the fixed backend constant actually applied (currently
+ * `0.92`) - surfaced here so the frontend can display it without hardcoding
+ * its own copy of the value; it is NOT a user-adjustable setting (see
+ * CLAUDE.md's Core workflow #4 - no UI control for this).
+ *
+ * Like `SuggestionResult`, this does NOT include full updated `Channel`
+ * objects - re-fetch the lineup after a successful call to see the
+ * newly-confirmed mappings.
+ */
+export interface BulkAcceptResult {
+  lineupId: string;
+  threshold: number;
+  confirmedCount: number;
+  confirmed: ConfirmedSuggestion[];
+}

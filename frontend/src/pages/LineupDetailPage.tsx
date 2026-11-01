@@ -10,6 +10,7 @@ import {
 import { ChannelRow } from '../components/ChannelRow';
 import { ReimportM3uPanel } from '../components/ReimportM3uPanel';
 import { SdLineupIdsEditor } from '../components/SdLineupIdsEditor';
+import { SuggestionsPanel } from '../components/SuggestionsPanel';
 import { SyncAndGeneratePanel } from '../components/SyncAndGeneratePanel';
 import type { Channel, Lineup } from '../types';
 import {
@@ -54,12 +55,12 @@ interface LineupDetailPageProps {
 }
 
 /**
- * Detail view for a single lineup: its SD lineup associations, channel
- * list (with per-channel edit/delete/mapping actions), a form to add a
- * channel manually, and - for `m3u`-sourced lineups only - a re-import
- * control (`ReimportM3uPanel`). No mapping suggestion/bulk-accept UI yet
- * (Phase 3) - mapping is plain manual entry per the Phase 1 backend
- * contract.
+ * Detail view for a single lineup: its SD lineup associations, mapping
+ * suggestion generation/bulk-accept (`SuggestionsPanel`), channel list
+ * (with per-channel edit/delete/mapping actions and, via `ChannelRow`,
+ * per-channel suggestion accept/reject), a form to add a channel manually,
+ * and - for `m3u`-sourced lineups only - a re-import control
+ * (`ReimportM3uPanel`).
  */
 export function LineupDetailPage({ lineupId, onBack }: LineupDetailPageProps) {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
@@ -131,6 +132,14 @@ export function LineupDetailPage({ lineupId, onBack }: LineupDetailPageProps) {
     // (added/updated/flagged-missing channels all included) - replace the
     // whole lineup wholesale rather than trying to reconcile it field by
     // field against the previous state.
+    setState({ status: 'ok', lineup });
+  }
+
+  function handleLineupRefreshed(lineup: Lineup) {
+    // Same rationale as `handleReimported`: `SuggestionsPanel` re-fetches
+    // the whole lineup itself after generate/bulk-accept (neither
+    // endpoint's response includes the per-channel suggestions/mappings it
+    // changed), so replace wholesale rather than merging.
     setState({ status: 'ok', lineup });
   }
 
@@ -215,6 +224,13 @@ export function LineupDetailPage({ lineupId, onBack }: LineupDetailPageProps) {
             lineupId={lineupId}
             sdLineupIds={state.lineup.sdLineupIds}
             onChanged={handleSdLineupIdsChanged}
+          />
+
+          <SubsectionTitle>Mapping suggestions</SubsectionTitle>
+          <SuggestionsPanel
+            lineupId={lineupId}
+            channels={state.lineup.channels}
+            onRefreshed={handleLineupRefreshed}
           />
 
           <SubsectionTitle>Channels</SubsectionTitle>

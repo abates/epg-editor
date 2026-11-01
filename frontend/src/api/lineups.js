@@ -310,6 +310,59 @@ export function syncAndGenerate(lineupId) {
 }
 
 /**
+ * Calls POST /api/lineups/{lineupId}/suggestions: (re)scores candidate SD
+ * stations - from the deduped union of the lineup's associated
+ * `sdLineupIds` - against every channel in the lineup, and overwrites each
+ * channel's `mapping.suggestions` with the result (capped at the top 5
+ * highest-scoring candidates per channel; see `docs/data-model.md`'s
+ * `suggestions` notes for the scoring/dedup rules). This is a real-network
+ * call against the SD API (fetching/caching station rosters on a cache
+ * miss) and can take a few seconds.
+ *
+ * The returned `SuggestionResult` does NOT include the actual suggestions -
+ * those live on each channel's own (unreturned-here) `mapping.suggestions`
+ * field, so callers must `getLineup(lineupId)` afterward to see them
+ * reflected (see `SuggestionsPanel`).
+ *
+ * Rejects with the extracted `detail` message for the backend's documented
+ * error cases: 404 (lineup doesn't exist), 503 (SD credentials not
+ * configured), 502 (SD/auth failure fetching a station roster).
+ *
+ * @param {string} lineupId
+ * @returns {Promise<unknown>} the `SuggestionResult`.
+ */
+export function generateSuggestions(lineupId) {
+  return request(`/api/lineups/${encodeURIComponent(lineupId)}/suggestions`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Calls POST /api/lineups/{lineupId}/bulk-accept-suggestions: confirms the
+ * mapping for every channel with an unconfirmed mapping whose top
+ * suggestion is unambiguously highest-scoring (ties are skipped, left for
+ * manual review - intentional, not a bug) and at/above the backend's fixed
+ * confidence threshold (not a UI control - see CLAUDE.md's Core workflow
+ * #4). Pure local computation against already-cached suggestions, no SD
+ * network call.
+ *
+ * The returned `BulkAcceptResult` doesn't include full updated `Channel`
+ * objects either - callers must `getLineup(lineupId)` afterward to see the
+ * newly-confirmed mappings (see `SuggestionsPanel`).
+ *
+ * Rejects with the extracted `detail` message for the backend's documented
+ * error case: 404 (lineup doesn't exist).
+ *
+ * @param {string} lineupId
+ * @returns {Promise<unknown>} the `BulkAcceptResult`.
+ */
+export function bulkAcceptSuggestions(lineupId) {
+  return request(`/api/lineups/${encodeURIComponent(lineupId)}/bulk-accept-suggestions`, {
+    method: 'POST',
+  });
+}
+
+/**
  * Calls POST /api/lineups/import-m3u (multipart/form-data: `name` + `file`)
  * to create a brand-new, `m3u`-sourced lineup from an uploaded M3U
  * playlist. Every parsed entry comes back in `result.added` since the
