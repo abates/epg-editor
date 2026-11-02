@@ -1,6 +1,6 @@
 [project]
 name = "epg-editor-backend"
-version = "0.1.0"
+version = "0.1.1"
 description = "epg-editor backend: FastAPI app, SchedulesDirect client, storage, and scheduler."
 authors = [
     { name = "Andrew Bates", email = "358901+abates@users.noreply.github.com" }
