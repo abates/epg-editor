@@ -3,7 +3,8 @@ import styled from 'styled-components';
 import { setChannelMapping } from '../api/lineups.js';
 import type { Channel, MappingSuggestion } from '../types';
 import { Button, ErrorText, SecondaryButton } from '../styles/primitives';
-import { StatusBadge, type StatusTone } from './StatusBadge';
+import { confidenceTone } from './mappingConfidence';
+import { StatusBadge } from './StatusBadge';
 
 const Wrapper = styled.div`
   margin-top: 4px;
@@ -161,26 +162,3 @@ function suggestionKey(suggestion: MappingSuggestion): string {
   return `${suggestion.sdStationId}:${suggestion.sdLineupId}`;
 }
 
-/**
- * Mirrors the backend's bulk-accept cutoff so suggestion tones look
- * consistent with what bulk-accept would actually do.
- *
- * Known limitation: this is a hand-maintained copy, not a value fetched
- * from the backend. `BulkAcceptResult.threshold` (see `types/index.ts`)
- * only comes back from the bulk-accept-suggestions response, and this
- * per-channel component has no threshold to read before that endpoint has
- * ever run. If `backend/app/services/suggestions.py`'s
- * `BULK_ACCEPT_THRESHOLD` is retuned, update this constant to match.
- */
-const BULK_ACCEPT_THRESHOLD_DISPLAY = 0.92;
-
-/** Reuses `StatusBadge`'s tone system rather than inventing a new one. */
-function confidenceTone(score: number): StatusTone {
-  if (score >= BULK_ACCEPT_THRESHOLD_DISPLAY) {
-    return 'ok';
-  }
-  if (score >= 0.6) {
-    return 'warning';
-  }
-  return 'pending';
-}

@@ -169,6 +169,59 @@ export interface BulkAcceptResult {
   confirmed: ConfirmedSuggestion[];
 }
 
+// --- Cache-only station search (`/api/lineups/{lineupId}/station-search`) -
+//
+// Backs the searchable station picker in `ChannelMappingForm` (backlog item
+// 37) - mirrors `backend/app/models/station_search.py`'s
+// `StationSearchCandidate`/`StationSearchResult`.
+
+/**
+ * One SD station candidate matched against a search query (or, in browse
+ * mode, one entry from the full candidate pool).
+ *
+ * `callsign`/`affiliate`/`logoUrl` are enrichment fields from cached SD
+ * station data and may be `null`. `score` is on the same 0-1 scale as
+ * `MappingSuggestion.score`; it's `0.0` for every result in browse mode
+ * (empty/whitespace `query`) and always `> 0.0` for a non-empty query -
+ * zero-relevance candidates are excluded from `results` entirely in that
+ * case rather than appearing with `score: 0.0` (see
+ * `StationSearchResult.results`'s docstring).
+ */
+export interface StationSearchCandidate {
+  stationID: string;
+  name: string;
+  callsign: string | null;
+  affiliate: string | null;
+  logoUrl: string | null;
+  sdLineupId: string;
+  score: number;
+}
+
+/**
+ * Response body for `GET /api/lineups/{lineupId}/station-search`.
+ *
+ * An empty `results` genuinely means "no matches" only when
+ * `uncachedSdLineupIds` is also empty - a non-empty `uncachedSdLineupIds`
+ * means some of the lineup's associated SD lineups have no cached station
+ * roster yet, so an empty/sparse `results` could just mean incomplete data,
+ * not "nothing matched." Treat `uncachedSdLineupIds` as a set (may
+ * theoretically contain duplicates) - dedupe client-side before rendering
+ * each one.
+ */
+export interface StationSearchResult {
+  lineupId: string;
+  query: string;
+  resultCount: number;
+  /**
+   * Size of the full deduped candidate pool before truncation by `limit` -
+   * use this for a "showing N of M, type to narrow" hint in browse mode
+   * when the pool is bigger than what's shown.
+   */
+  candidatePoolSize: number;
+  uncachedSdLineupIds: string[];
+  results: StationSearchCandidate[];
+}
+
 // --- SchedulesDirect account lineups (`/api/sd-account/*`) --------------
 //
 // These mirror `backend/app/models/sd.py`'s `SdLineupSummary`/
