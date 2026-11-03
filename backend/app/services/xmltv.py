@@ -69,8 +69,16 @@ def _channel_xmltv_id(channel: Channel) -> str:
     Prefers `tvgId` (what an M3U-derived channel would be matched against
     downstream) and falls back to epg-editor's own channel id for
     manually-created channels that have no `tvgId`.
+
+    Output-only sanitization (backlog item 34): Plex fails to match XMLTV
+    channel ids containing a literal `.` (e.g. an ATSC-subchannel-style
+    `tvgId` like `7.1`), so dots are replaced with `-` in the emitted id.
+    This never touches the stored `Channel.tvgId`/`id` in
+    `config/lineups.json` — only the string returned here, used for the
+    `<channel id>`/`<programme channel>` attributes. Scoped to dots only
+    per the backlog item; a broader Plex-unsafe character set is deferred.
     """
-    return channel.tvgId or channel.id
+    return (channel.tvgId or channel.id).replace(".", "-")
 
 
 def _program_title(program: SdProgram) -> str:
