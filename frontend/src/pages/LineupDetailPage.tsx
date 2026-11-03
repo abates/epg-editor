@@ -11,6 +11,7 @@ import { ChannelRow } from '../components/ChannelRow';
 import { ReimportM3uPanel } from '../components/ReimportM3uPanel';
 import { SdLineupIdsEditor } from '../components/SdLineupIdsEditor';
 import { SuggestionsPanel } from '../components/SuggestionsPanel';
+import { XmltvUrlPanel } from '../components/XmltvUrlPanel';
 import type { Channel, Lineup } from '../types';
 import {
   Card,
@@ -203,6 +204,9 @@ export function LineupDetailPage({ lineupId, onBack }: LineupDetailPageProps) {
             Source: {state.lineup.source} · {state.lineup.channels.length} channel
             {state.lineup.channels.length === 1 ? '' : 's'} · created {state.lineup.createdAt}
           </Meta>
+
+          <SubsectionTitle>XMLTV URL</SubsectionTitle>
+          <XmltvUrlPanel lineupId={lineupId} />
 
           {state.lineup.source === 'm3u' && (
             <>

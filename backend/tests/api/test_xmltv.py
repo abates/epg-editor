@@ -55,3 +55,25 @@ def test_route_is_not_under_api_prefix(client):
     # nested under /api — confirm it isn't accidentally double-registered.
     response = client.get("/api/xmltv/living-room.xml")
     assert response.status_code == 404
+
+
+def test_head_404_when_no_file_generated_yet(client):
+    # Regression test: @router.get(...) alone only registers GET in
+    # FastAPI, so a HEAD existence-check (used by the frontend to detect
+    # whether a lineup's XMLTV has been generated yet) must still resolve
+    # to a real 404 rather than a 405.
+    response = client.head("/xmltv/living-room.xml")
+    assert response.status_code == 404
+
+
+def test_head_200_once_generated(client, tmp_path):
+    output_dir = tmp_path / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fixture_xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv></tv>\n'
+    (output_dir / "living-room.xml").write_text(fixture_xml, encoding="utf-8")
+
+    response = client.head("/xmltv/living-room.xml")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/xml")
+    assert response.content == b""

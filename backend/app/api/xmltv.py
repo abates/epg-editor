@@ -21,8 +21,26 @@ router = APIRouter(tags=["xmltv"])
 
 
 @router.get("/xmltv/{lineup_id}.xml")
+@router.head("/xmltv/{lineup_id}.xml", include_in_schema=False)
 def get_xmltv(lineup_id: str) -> FileResponse:
-    """Serve a lineup's already-generated XMLTV file."""
+    """Serve a lineup's already-generated XMLTV file.
+
+    Also answers `HEAD` (unlike plain `@router.get`, which only registers
+    `GET`) so clients can check whether a lineup's file has been generated
+    yet without pulling the full body — `FileResponse` already omits the
+    body on `HEAD` while still returning the same status/headers as `GET`.
+
+    Registered as two stacked decorators (`@router.get` + `@router.head`)
+    rather than `@router.api_route(..., methods=["GET", "HEAD"])`: the
+    latter gives GET and HEAD the same auto-derived operation ID, which
+    FastAPI warns about as a duplicate when building the OpenAPI schema
+    (invalid per the OpenAPI spec) — confirmed that an explicit
+    `operation_id=` on `api_route` does *not* fix this, since both methods
+    still land on one `APIRoute` object. The HEAD operation is excluded
+    from the schema (`include_in_schema=False`) since it's purely a
+    same-body existence-check variant of the GET operation, not a
+    separately documented capability.
+    """
     try:
         path = get_xmltv_output_path(lineup_id)
     except ValueError:
