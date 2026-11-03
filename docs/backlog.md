@@ -270,3 +270,60 @@ performed by Andrew against his real account.
     as expected, and no excessive SD API calls were made (md5 short-circuit
     is working).
     Development does not continue past this point until you confirm.
+
+## Phase 6 — Bugs & feature requests from real-world use (reported 2026-11-03)
+
+Reported by Andrew against his running home deployment while checkpoint 33
+(scheduled refresh) is still soaking — tracked independently since none of
+these touch the refresh pipeline itself.
+
+34. **Bug: sanitize dots out of XMLTV channel ids** (`backend-developer`) —
+    Plex fails to match channel ids containing a literal `.` (e.g. an
+    ATSC-subchannel-style `tvgId` like `7.1`). Fix in `services/xmltv.py`'s
+    `_channel_xmltv_id` (used for both `<channel id>` and `<programme
+    channel>`): replace `.` with `-` in the id *as emitted*, output-only —
+    never mutate the stored `tvgId`/channel `id` in `config/lineups.json`.
+    The existing duplicate-id dedup in `confirmed_mapped_channels` already
+    covers the resulting rare collision case (e.g. two tvgIds that only
+    differ by dot placement sanitizing to the same string), so no new
+    collision handling is needed. Once live against Andrew's real
+    environment, confirm whether any other Plex-unsafe characters need the
+    same treatment rather than guessing at a broader character set now.
+35. **Feature: XMLTV link + copy-to-clipboard on the lineup page**
+    (`frontend-developer`) — on `LineupDetailPage`, surface the lineup's
+    full `/xmltv/{lineup-id}.xml` URL (absolute, the app's own origin) with
+    a copy-to-clipboard button, so Andrew doesn't have to hand-construct it
+    for Plex/Jellyfin. Only show it once a file has actually been
+    generated (reuse the existing generation-status signal); show a
+    "not generated yet" state otherwise rather than a dead link.
+36. **Feature + open decision: name the generated file after the lineup,
+    not its id** (`backend-developer` + `frontend-developer`) — conflicts
+    with the "stable HTTP path" guarantee CLAUDE.md locks in for
+    `/xmltv/{lineup-id}.xml` (so a configured Plex/Jellyfin EPG URL never
+    breaks). Per Andrew, write up both options below and bring them back to
+    him for a decision before implementation starts:
+    - **(a) Cosmetic only, URL unchanged (recommended):** URL stays
+      `/xmltv/{lineup-id}.xml` forever; `api/xmltv.py`'s response sets
+      `Content-Disposition` so a manual download/save-as suggests the
+      lineup name as the filename. Nothing on disk changes, the stable-URL
+      guarantee is untouched.
+    - **(b) URL itself becomes name-derived:** e.g. `/xmltv/{slug}.xml`
+      from the lineup name. Friendlier URL, but renaming a lineup moves its
+      EPG URL — any already-configured Plex/Jellyfin source would need
+      re-pointing. Needs a collision rule for two lineups with the same (or
+      same-slugified) name.
+37. **Feature: search Schedules Direct stations when mapping a channel**
+    (`backend-developer` + `frontend-developer`) — today, when Phase 3's
+    fuzzy suggestions don't surface the right station, the only fallback is
+    `ChannelMappingForm`'s raw `sdStationId`/`sdLineupId` text fields (this
+    predates Phase 3 — the component's own docstring still says "no
+    suggestion scoring yet"). Add a searchable picker over the station
+    roster(s) already cached for the lineup's associated SD lineups
+    (`storage/sd_cache.py`), filtering by name/callsign/affiliate as the
+    user types — no live SD call, rosters are already kept fresh by the
+    Phase 5 refresh job. Backend: a new read endpoint over the cached
+    roster, reusing the existing name/callsign/affiliate matching rather
+    than inventing a new scoring scheme. Frontend: replace/augment the
+    manual text-entry mode in `ChannelMappingForm` with a search-and-select
+    UI; keep raw id entry available (e.g. behind an "advanced" toggle) as
+    an escape hatch for a station that can't be found by search.
