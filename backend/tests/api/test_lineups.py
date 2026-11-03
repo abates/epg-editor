@@ -331,3 +331,179 @@ def test_set_channel_mapping_rejects_unassociated_sd_lineup(client):
     # Confirm nothing was persisted.
     lineup = client.get(f"/api/lineups/{lineup_id}").json()
     assert lineup["channels"][0]["mapping"] is None
+
+
+# --- Station search (backlog item 37) ---------------------------------------
+
+
+def _seed_station_cache(tmp_path, sd_lineup_id: str, stations: list[dict]) -> None:
+    from app.models.sd import SdLineupStationsResponse, SdStation
+    from app.storage import sd_cache
+
+    sd_cache.save_lineup_stations(
+        sd_lineup_id,
+        SdLineupStationsResponse(stations=[SdStation(**s) for s in stations]),
+        base_dir=tmp_path,
+    )
+
+
+def test_station_search_ranks_matches(client, tmp_path):
+    lineup_id = client.post("/api/lineups", json={"name": "Lineup"}).json()["id"]
+    client.put(
+        f"/api/lineups/{lineup_id}/sd-lineups", json={"sdLineupIds": ["USA-OTA12345"]}
+    )
+    _seed_station_cache(
+        tmp_path,
+        "USA-OTA12345",
+        [
+            {"stationID": "10123", "name": "KGO-TV", "callsign": "KGO", "affiliate": "ABC"},
+            {
+                "stationID": "10456",
+                "name": "FOX 5 New York",
+                "callsign": "WNYW",
+                "affiliate": "FOX",
+            },
+        ],
+    )
+
+    response = client.get(f"/api/lineups/{lineup_id}/station-search", params={"q": "KGO-TV"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["lineupId"] == lineup_id
+    assert body["query"] == "KGO-TV"
+    assert body["results"][0]["stationID"] == "10123"
+    scores = [r["score"] for r in body["results"]]
+    assert scores == sorted(scores, reverse=True)
+
+
+def test_station_search_non_empty_query_with_no_relevance_returns_empty_results(
+    client, tmp_path
+):
+    lineup_id = client.post("/api/lineups", json={"name": "Lineup"}).json()["id"]
+    client.put(
+        f"/api/lineups/{lineup_id}/sd-lineups", json={"sdLineupIds": ["USA-OTA12345"]}
+    )
+    _seed_station_cache(
+        tmp_path,
+        "USA-OTA12345",
+        [
+            {"stationID": "10123", "name": "KGO-TV", "callsign": "KGO", "affiliate": "ABC"},
+            {
+                "stationID": "10456",
+                "name": "FOX 5 New York",
+                "callsign": "WNYW",
+                "affiliate": "FOX",
+            },
+        ],
+    )
+
+    response = client.get(
+        f"/api/lineups/{lineup_id}/station-search", params={"q": "qqqqqqqq"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["results"] == []
+    assert body["resultCount"] == 0
+    assert body["candidatePoolSize"] == 2
+    assert body["uncachedSdLineupIds"] == []
+
+
+def test_station_search_skips_sd_lineup_with_no_cached_roster(client, tmp_path):
+    lineup_id = client.post("/api/lineups", json={"name": "Lineup"}).json()["id"]
+    client.put(
+        f"/api/lineups/{lineup_id}/sd-lineups",
+        json={"sdLineupIds": ["USA-OTA12345", "USA-CABLE999"]},
+    )
+    _seed_station_cache(
+        tmp_path,
+        "USA-OTA12345",
+        [{"stationID": "10123", "name": "KGO-TV", "callsign": "KGO", "affiliate": "ABC"}],
+    )
+    # USA-CABLE999 never cached.
+
+    response = client.get(f"/api/lineups/{lineup_id}/station-search", params={"q": "KGO"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["results"]) == 1
+    assert body["results"][0]["stationID"] == "10123"
+    assert body["uncachedSdLineupIds"] == ["USA-CABLE999"]
+    assert body["candidatePoolSize"] == 1
+
+
+def test_station_search_first_sd_lineup_id_wins_for_duplicate_station(client, tmp_path):
+    lineup_id = client.post("/api/lineups", json={"name": "Lineup"}).json()["id"]
+    client.put(
+        f"/api/lineups/{lineup_id}/sd-lineups",
+        json={"sdLineupIds": ["USA-OTA12345", "USA-CABLE999"]},
+    )
+    station = {"stationID": "10123", "name": "KGO-TV", "callsign": "KGO", "affiliate": "ABC"}
+    _seed_station_cache(tmp_path, "USA-OTA12345", [station])
+    _seed_station_cache(tmp_path, "USA-CABLE999", [station])
+
+    response = client.get(f"/api/lineups/{lineup_id}/station-search", params={"q": "KGO"})
+
+    assert response.status_code == 200
+    matches = [r for r in response.json()["results"] if r["stationID"] == "10123"]
+    assert len(matches) == 1
+    assert matches[0]["sdLineupId"] == "USA-OTA12345"
+
+
+def test_station_search_empty_query_returns_full_pool(client, tmp_path):
+    lineup_id = client.post("/api/lineups", json={"name": "Lineup"}).json()["id"]
+    client.put(
+        f"/api/lineups/{lineup_id}/sd-lineups", json={"sdLineupIds": ["USA-OTA12345"]}
+    )
+    _seed_station_cache(
+        tmp_path,
+        "USA-OTA12345",
+        [
+            {"stationID": "10123", "name": "KGO-TV", "callsign": "KGO", "affiliate": "ABC"},
+            {
+                "stationID": "10456",
+                "name": "FOX 5 New York",
+                "callsign": "WNYW",
+                "affiliate": "FOX",
+            },
+        ],
+    )
+
+    response = client.get(f"/api/lineups/{lineup_id}/station-search")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["resultCount"] == 2
+    assert body["candidatePoolSize"] == 2
+    assert body["uncachedSdLineupIds"] == []
+    assert all(r["score"] == 0.0 for r in body["results"])
+
+
+def test_station_search_limit_is_bounded(client, tmp_path):
+    lineup_id = client.post("/api/lineups", json={"name": "Lineup"}).json()["id"]
+    client.put(
+        f"/api/lineups/{lineup_id}/sd-lineups", json={"sdLineupIds": ["USA-OTA12345"]}
+    )
+    _seed_station_cache(
+        tmp_path,
+        "USA-OTA12345",
+        [{"stationID": "10123", "name": "KGO-TV", "callsign": "KGO", "affiliate": "ABC"}],
+    )
+
+    too_big = client.get(
+        f"/api/lineups/{lineup_id}/station-search",
+        params={"q": "KGO", "limit": 10_000},
+    )
+    assert too_big.status_code == 422
+
+    too_small = client.get(
+        f"/api/lineups/{lineup_id}/station-search",
+        params={"q": "KGO", "limit": 0},
+    )
+    assert too_small.status_code == 422
+
+
+def test_station_search_404_when_lineup_missing(client):
+    response = client.get("/api/lineups/does-not-exist/station-search", params={"q": "KGO"})
+    assert response.status_code == 404

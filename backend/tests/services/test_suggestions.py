@@ -623,6 +623,249 @@ def test_enrich_channel_suggestions_noop_for_channel_with_no_mapping(tmp_path):
     assert enriched.mapping is None
 
 
+def test_search_stations_ranks_matches_by_score(tmp_path):
+    from app.models.sd import SdLineupStationsResponse, SdStation
+
+    lineup_id = make_lineup(["USA-OTA12345"])
+    sd_cache.save_lineup_stations(
+        "USA-OTA12345",
+        SdLineupStationsResponse(
+            stations=[SdStation(**kgo_station()), SdStation(**fox_station())]
+        ),
+        base_dir=tmp_path,
+    )
+
+    result = suggestions_service.search_stations(lineup_id, "KGO-TV", base_dir=tmp_path)
+
+    assert result.lineupId == lineup_id
+    assert result.query == "KGO-TV"
+    station_ids = [r.stationID for r in result.results]
+    assert station_ids[0] == "10123"
+    scores = [r.score for r in result.results]
+    assert scores == sorted(scores, reverse=True)
+    assert result.results[0].score > result.results[1].score
+
+
+def test_search_stations_matches_affiliate(tmp_path):
+    """Must be isolated to affiliate-only matching: the query shares no text
+    with the station's `name`/`callsign`, only its `affiliate` — so this
+    test would genuinely fail if affiliate scoring were removed (a prior
+    version of this test used "FOX 5" against a station named "FOX 5 New
+    York", which also matches on `name` and so wouldn't isolate the
+    affiliate path at all)."""
+    from app.models.sd import SdLineupStationsResponse, SdStation
+
+    lineup_id = make_lineup(["USA-OTA12345"])
+    wnyw_station = {
+        "stationID": "10456",
+        "name": "WNYW",
+        "callsign": "WNYW",
+        "affiliate": "FOX",
+    }
+    sd_cache.save_lineup_stations(
+        "USA-OTA12345",
+        SdLineupStationsResponse(
+            stations=[SdStation(**kgo_station()), SdStation(**wnyw_station)]
+        ),
+        base_dir=tmp_path,
+    )
+
+    result = suggestions_service.search_stations(lineup_id, "FOX", base_dir=tmp_path)
+
+    assert result.results[0].stationID == "10456"
+
+
+def test_search_stations_non_empty_query_with_no_relevance_returns_empty_results(
+    tmp_path,
+):
+    """Follow-on review finding: a non-empty query that matches nothing
+    meaningful must come back as an empty `results` list, not a list of
+    `limit` zero-score candidates ordered by the tie-break rule alone --
+    otherwise the response can never signal "genuinely no matches" for a
+    real query. `candidatePoolSize` must still reflect the full deduped
+    pool, since it's "before scoring/truncation," not "before relevance
+    filtering.\""""
+    from app.models.sd import SdLineupStationsResponse, SdStation
+
+    lineup_id = make_lineup(["USA-OTA12345"])
+    sd_cache.save_lineup_stations(
+        "USA-OTA12345",
+        SdLineupStationsResponse(
+            stations=[SdStation(**kgo_station()), SdStation(**fox_station())]
+        ),
+        base_dir=tmp_path,
+    )
+
+    result = suggestions_service.search_stations(lineup_id, "qqqqqqqq", base_dir=tmp_path)
+
+    assert result.results == []
+    assert result.resultCount == 0
+    assert result.candidatePoolSize == 2
+    assert result.uncachedSdLineupIds == []
+
+
+def test_search_stations_skips_sd_lineup_with_no_cached_roster(tmp_path):
+    """A SD lineup associated with the epg-editor lineup but never cached
+    (no `generate_suggestions` run yet, cache evicted, etc.) must be
+    silently skipped -- not an error, and never a live SD fetch (there's no
+    `SdClient` available to this function at all). It must also be reported
+    back via `uncachedSdLineupIds` so the frontend can distinguish this from
+    a genuine no-match (Finding 2)."""
+    from app.models.sd import SdLineupStationsResponse, SdStation
+
+    lineup_id = make_lineup(["USA-OTA12345", "USA-CABLE999"])
+    sd_cache.save_lineup_stations(
+        "USA-OTA12345",
+        SdLineupStationsResponse(stations=[SdStation(**kgo_station())]),
+        base_dir=tmp_path,
+    )
+    # USA-CABLE999 deliberately never cached.
+
+    result = suggestions_service.search_stations(lineup_id, "KGO", base_dir=tmp_path)
+
+    assert len(result.results) == 1
+    assert result.results[0].stationID == "10123"
+    assert result.uncachedSdLineupIds == ["USA-CABLE999"]
+    assert result.candidatePoolSize == 1
+
+
+def test_search_stations_first_sd_lineup_id_wins_for_duplicate_station(tmp_path):
+    """Same resolution rule as `generate_suggestions`: a station present in
+    more than one of the lineup's associated SD lineups is attributed to
+    whichever `sdLineupId` comes first in `lineup.sdLineupIds` order."""
+    from app.models.sd import SdLineupStationsResponse, SdStation
+
+    lineup_id = make_lineup(["USA-OTA12345", "USA-CABLE999"])
+    sd_cache.save_lineup_stations(
+        "USA-OTA12345",
+        SdLineupStationsResponse(stations=[SdStation(**kgo_station())]),
+        base_dir=tmp_path,
+    )
+    sd_cache.save_lineup_stations(
+        "USA-CABLE999",
+        SdLineupStationsResponse(stations=[SdStation(**kgo_station())]),
+        base_dir=tmp_path,
+    )
+
+    result = suggestions_service.search_stations(lineup_id, "KGO", base_dir=tmp_path)
+
+    matches = [r for r in result.results if r.stationID == "10123"]
+    assert len(matches) == 1
+    assert matches[0].sdLineupId == "USA-OTA12345"
+
+
+def test_search_stations_empty_query_returns_full_pool_sorted_by_name(tmp_path):
+    from app.models.sd import SdLineupStationsResponse, SdStation
+
+    lineup_id = make_lineup(["USA-OTA12345"])
+    sd_cache.save_lineup_stations(
+        "USA-OTA12345",
+        SdLineupStationsResponse(
+            stations=[SdStation(**kgo_station()), SdStation(**fox_station())]
+        ),
+        base_dir=tmp_path,
+    )
+
+    result = suggestions_service.search_stations(lineup_id, "", base_dir=tmp_path)
+
+    assert result.resultCount == 2
+    assert result.candidatePoolSize == 2
+    assert result.uncachedSdLineupIds == []
+    assert [r.name for r in result.results] == sorted(r.name for r in result.results)
+    assert all(r.score == 0.0 for r in result.results)
+
+
+def test_search_stations_respects_limit(tmp_path):
+    from app.models.sd import SdLineupStationsResponse, SdStation
+
+    lineup_id = make_lineup(["USA-OTA12345"])
+    stations = [
+        SdStation(stationID=f"S{i}", name=f"KGO-TV {i}", callsign="KGO", affiliate="ABC")
+        for i in range(10)
+    ]
+    sd_cache.save_lineup_stations(
+        "USA-OTA12345",
+        SdLineupStationsResponse(stations=stations),
+        base_dir=tmp_path,
+    )
+
+    result = suggestions_service.search_stations(
+        lineup_id, "KGO-TV", limit=3, base_dir=tmp_path
+    )
+
+    assert result.resultCount == 3
+    assert len(result.results) == 3
+    # The full candidate pool is bigger than `limit` -- `candidatePoolSize`
+    # must reflect the pre-truncation pool size, not `resultCount`.
+    assert result.candidatePoolSize == 10
+
+
+def test_search_stations_tie_break_matches_generate_suggestions_name_only_order(
+    tmp_path,
+):
+    """Finding 1: `search_stations` must break ties on the primary score the
+    same way `generate_suggestions` does -- by the secondary name-only
+    score, descending -- not alphabetically. A query of "ABC" scores a
+    perfect 1.0 against every ABC-affiliate station's `affiliate` field;
+    with the old alphabetical tie-break, an alphabetically-earlier
+    affiliate-only noise station would rank ahead of the station whose
+    actual *name* is "ABC" (a strictly better match once ties are broken)."""
+    from app.models.sd import SdLineupStationsResponse, SdStation
+
+    lineup_id = make_lineup(["USA-OTA12345"])
+
+    # Noise stations: tie at the maximum score purely via an exact
+    # `affiliate` match, named so they'd sort alphabetically *before* the
+    # genuine match below ("Aardvark"/"Alpha" < "ZZZ Genuine").
+    noise_stations = [
+        {
+            "stationID": "N1",
+            "name": "Aardvark Local",
+            "callsign": "WAA1",
+            "affiliate": "ABC",
+        },
+        {
+            "stationID": "N2",
+            "name": "Alpha Local",
+            "callsign": "WAA2",
+            "affiliate": "ABC",
+        },
+    ]
+    # The genuine match: also ties at the maximum primary score (its
+    # `affiliate` matches too), but its `name` is an exact match for the
+    # query -- a strictly better candidate once ties are broken. Named to
+    # sort alphabetically *last*, so a naive alphabetical tie-break would
+    # rank it behind both noise stations.
+    genuine_station = {
+        "stationID": "GENUINE",
+        "name": "ZZZ Genuine ABC",
+        "callsign": "WABC",
+        "affiliate": "ABC",
+    }
+
+    sd_cache.save_lineup_stations(
+        "USA-OTA12345",
+        SdLineupStationsResponse(
+            stations=[SdStation(**s) for s in noise_stations]
+            + [SdStation(**genuine_station)]
+        ),
+        base_dir=tmp_path,
+    )
+
+    result = suggestions_service.search_stations(lineup_id, "ABC", base_dir=tmp_path)
+
+    # Sanity check the premise: all three tie on the primary score.
+    assert len({r.score for r in result.results}) == 1
+    # The name-only-score-driven tie-break puts the genuine match first,
+    # not alphabetically-first.
+    assert result.results[0].stationID == "GENUINE"
+
+
+def test_search_stations_lineup_not_found_raises(tmp_path):
+    with pytest.raises(lineups_service.NotFoundError):
+        suggestions_service.search_stations("does-not-exist", "KGO", base_dir=tmp_path)
+
+
 def test_bulk_accept_confirms_when_top_is_uniquely_highest_despite_other_high_scores(
     tmp_path,
 ):

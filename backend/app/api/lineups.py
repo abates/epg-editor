@@ -7,10 +7,11 @@ or storage access here (see CLAUDE.md's backend module layout).
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.models.lineup import Channel, Lineup
+from app.models.station_search import StationSearchResult
 from app.services import lineups as lineups_service
 from app.services import suggestions as suggestions_service
 
@@ -133,6 +134,43 @@ def update_sd_lineup_ids(lineup_id: str, body: UpdateSdLineupIdsRequest) -> Line
     except lineups_service.ValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return suggestions_service.enrich_lineup_suggestions(lineup)
+
+
+@router.get("/lineups/{lineup_id}/station-search", response_model=StationSearchResult)
+def search_stations(
+    lineup_id: str,
+    q: str = "",
+    limit: int = Query(
+        default=suggestions_service.STATION_SEARCH_DEFAULT_LIMIT,
+        ge=1,
+        le=suggestions_service.STATION_SEARCH_MAX_LIMIT,
+    ),
+) -> StationSearchResult:
+    """Search/rank the lineup's cached candidate SD stations by `q`.
+
+    Backlog item 37: backs a searchable station picker in the mapping UI,
+    for when Phase 3's automatic suggestions miss. Cache-only — never
+    triggers a live SD call, unlike `POST /lineups/{lineup_id}/suggestions`
+    (see `services.suggestions.search_stations`'s docstring); a SD lineup
+    with no cached roster yet just contributes no candidates rather than
+    erroring, and is listed on the response's `uncachedSdLineupIds` so the
+    frontend can tell "not fetched yet" apart from a genuine no-match. `q`
+    omitted/empty returns the full (deduped) candidate pool, sorted by
+    name, up to `limit`, including zero-score entries ("browse mode"); a
+    non-empty `q` that matches nothing returns an empty `results` list
+    instead — see `services.suggestions.search_stations`'s docstring for
+    both of those behaviors, and the response's `candidatePoolSize` field
+    for the full pool size regardless of how many results `limit`/
+    relevance-filtering leave in `results`. `limit` defaults to
+    `STATION_SEARCH_DEFAULT_LIMIT` and is hard-capped at
+    `STATION_SEARCH_MAX_LIMIT` (422 if a caller requests more).
+
+    404 if the lineup doesn't exist.
+    """
+    try:
+        return suggestions_service.search_stations(lineup_id, q, limit=limit)
+    except lineups_service.NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/lineups/{lineup_id}/channels", response_model=Channel, status_code=201)

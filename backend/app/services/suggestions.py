@@ -37,6 +37,7 @@ from app.models.lineup import (
     MappingSuggestion,
 )
 from app.models.sd import SdStation
+from app.models.station_search import StationSearchCandidate, StationSearchResult
 from app.models.suggestions import (
     BulkAcceptResult,
     ChannelSuggestionCount,
@@ -57,6 +58,19 @@ from app.storage.lineups import update_lineups
 #: value for Phase 3; revisit at checkpoint 25 if real lineups show 5 is
 #: too few/many.
 MAX_SUGGESTIONS_PER_CHANNEL = 5
+
+#: Default/ceiling result counts for `search_stations` (backlog item 37).
+#: Same rationale as `MAX_SUGGESTIONS_PER_CHANNEL` above — a cable SD
+#: lineup's roster can run into the hundreds, and an as-you-type picker UI
+#: has no use for an unranked wall of results. `STATION_SEARCH_DEFAULT_LIMIT`
+#: is what the API applies when the caller doesn't specify `limit`;
+#: `STATION_SEARCH_MAX_LIMIT` is a hard ceiling. The API route
+#: (`api/lineups.py`) *rejects* (422, via `Query(ge=1, le=...)`) a `limit`
+#: outside `[1, STATION_SEARCH_MAX_LIMIT]` rather than clamping it — it's
+#: `search_stations` itself below that clamps defensively, for callers
+#: (tests, future non-HTTP callers) that bypass that route's validation.
+STATION_SEARCH_DEFAULT_LIMIT = 25
+STATION_SEARCH_MAX_LIMIT = 100
 
 #: Fixed backend bulk-accept threshold (0-1 scale, matching
 #: `MappingSuggestion.score`). Per CLAUDE.md, this is a backend constant,
@@ -157,6 +171,21 @@ def _score_channel_against_station(channel_name: str, station: SdStation) -> flo
         if score > best:
             best = score
     return best / 100.0
+
+
+def _score_query_against_station(query: str, station: SdStation) -> float:
+    """Score a free-text search query against one candidate station.
+
+    Pure naming wrapper around `_score_channel_against_station` — same
+    scoring math/thresholds (`rapidfuzz.fuzz.WRatio` +
+    `rapidfuzz.utils.default_process`, max across `name`/`callsign`/
+    `affiliate`, normalized to 0-1), reused as-is per backlog item 37's
+    explicit instruction not to invent a different scoring scheme for
+    search. Exists only so call sites in `search_stations` don't read as
+    "scoring a *channel's* name" when the input is actually arbitrary
+    user-typed search text — the parameter name is the only difference.
+    """
+    return _score_channel_against_station(query, station)
 
 
 def _score_channel_against_station_name_only(
@@ -536,13 +565,194 @@ def bulk_accept_suggestions(
     return update_lineups(mutate)
 
 
+def search_stations(
+    lineup_id: str,
+    query: str,
+    *,
+    limit: int = STATION_SEARCH_DEFAULT_LIMIT,
+    base_dir: Path | None = None,
+) -> StationSearchResult:
+    """Rank a lineup's cached candidate SD stations against a search query.
+
+    Backlog item 37: the backend half of a searchable station picker for
+    the mapping UI, used when Phase 3's automatic suggestions miss. Unlike
+    `generate_suggestions`, this is purely a read path:
+
+    - Candidate pool: the same union-deduped-by-`stationID` set across every
+      distinct `sdLineupId` in `lineup.sdLineupIds` that `generate_suggestions`
+      builds (see that function's docstring for the "first `sdLineupId` in
+      list order wins" rule for a station appearing in more than one
+      associated SD lineup — applied identically here). The only difference
+      is *how* each SD lineup's roster is obtained: this function is
+      cache-only (`storage.sd_cache.load_lineup_stations`) and never calls
+      `sd_client`/SD, per CLAUDE.md's "never speculative-fetch" rule and the
+      task brief's explicit "no live SD call" requirement. A SD lineup whose
+      roster isn't cached yet is silently skipped (contributes zero
+      candidates) rather than raising or triggering a fetch — the search
+      results for that lineup are just incomplete until a
+      `generate_suggestions` run (or the scheduled refresh) populates it.
+      That subset of `lineup.sdLineupIds` is also surfaced on the result as
+      `uncachedSdLineupIds`, so the frontend can distinguish "genuinely no
+      matches" from "part of the candidate pool hasn't been fetched yet"
+      (follow-on review finding — a plain empty `results` list was
+      previously indistinguishable between the two cases).
+    - Scoring: identical math to suggestion generation
+      (`_score_channel_against_station`, aliased here as
+      `_score_query_against_station` purely for call-site readability) — no
+      separate threshold/scoring scheme for search, per the task brief.
+      Results are sorted descending by primary score; ties on that score
+      are broken exactly the way `generate_suggestions` breaks ties for its
+      top-N cutoff: a secondary, name-only score
+      (`_score_channel_against_station_name_only`, descending), then
+      station `name` ascending as a final deterministic tie-break
+      (follow-on review finding — this previously broke ties alphabetically
+      only, which could rank e.g. a "FOX" query's genuine best-name match
+      behind an alphabetically-earlier same-affiliate station; the two code
+      paths now agree whenever they score the same inputs).
+    - Empty/whitespace-only `query`: rather than erroring or returning
+      nothing, this is treated as "browse" mode — every candidate is
+      returned (up to `limit`), sorted alphabetically by `name`, each with
+      `score=0.0` (there's no real query to score against, and a WRatio
+      score against an empty string is `0` for everything, which would sort
+      arbitrarily/by pool-insertion order instead of something a human finds
+      useful). This lets the frontend show a sensible initial list before
+      the user has typed anything, rather than requiring a minimum query
+      length. Documented design choice per the task brief's "your call."
+    - Result cap: `limit`, clamped to `[1, STATION_SEARCH_MAX_LIMIT]`
+      defensively (the API route enforces the same bounds at the request-
+      validation layer with a 422; this function's own clamp is for callers
+      — tests, future non-HTTP callers — that bypass that route). The full
+      deduped pool size *before* this cap is applied is reported separately
+      as `candidatePoolSize`, so the frontend can show e.g. "showing 25 of
+      340" instead of a silently truncated list with no hint more exist.
+      `candidatePoolSize` is unaffected by the zero-score filtering below —
+      it's "before scoring/truncation," not "before relevance filtering."
+    - Minimum relevance for a non-empty query (follow-on review finding):
+      candidates scoring exactly `0.0` are dropped *before* the `limit` cap
+      is applied, so a non-empty query that genuinely matches nothing (e.g.
+      `q="xyzzy"`) returns an empty `results` list instead of up to `limit`
+      zero-relevance candidates ordered by the tie-break rule alone. This
+      filter only applies to the real-query path — browse mode (empty/
+      whitespace-only `query`, handled above) intentionally keeps every
+      candidate at `score=0.0`, since there's no query for them to be
+      irrelevant *to*. Consequently, an empty `results` list with an empty
+      `uncachedSdLineupIds` genuinely means "no matches found," not "matches
+      were found but none scored above some threshold" — there is no
+      nonzero minimum-score threshold here, just the exclusion of literal
+      zero scores.
+
+    Raises `services.lineups.NotFoundError` if no such lineup exists.
+    """
+    lineup = get_lineup(lineup_id)
+    capped_limit = min(max(limit, 1), STATION_SEARCH_MAX_LIMIT)
+
+    candidate_pool: dict[str, tuple[SdStation, str]] = {}
+    uncached_sd_lineup_ids: list[str] = []
+    for sd_lineup_id in lineup.sdLineupIds:
+        cached = sd_cache.load_lineup_stations(sd_lineup_id, base_dir=base_dir)
+        if cached is None:
+            # Cache-only: a SD lineup with no cached roster yet just
+            # contributes no candidates, rather than erroring or fetching —
+            # recorded so the response can distinguish this from a genuine
+            # no-match (see `uncachedSdLineupIds`'s docstring).
+            uncached_sd_lineup_ids.append(sd_lineup_id)
+            continue
+        for station in cached.data.stations:
+            if station.stationID not in candidate_pool:
+                candidate_pool[station.stationID] = (station, sd_lineup_id)
+
+    candidate_pool_size = len(candidate_pool)
+    stripped_query = query.strip()
+
+    if not stripped_query:
+        ordered = sorted(
+            candidate_pool.values(), key=lambda entry: entry[0].name.lower()
+        )
+        results = [
+            StationSearchCandidate(
+                stationID=station.stationID,
+                name=station.name,
+                callsign=station.callsign,
+                affiliate=station.affiliate,
+                logoUrl=station.logo.URL if station.logo else None,
+                sdLineupId=sd_lineup_id,
+                score=0.0,
+            )
+            for station, sd_lineup_id in ordered[:capped_limit]
+        ]
+        return StationSearchResult(
+            lineupId=lineup_id,
+            query=query,
+            resultCount=len(results),
+            candidatePoolSize=candidate_pool_size,
+            uncachedSdLineupIds=uncached_sd_lineup_ids,
+            results=results,
+        )
+
+    scored = [
+        (
+            _score_query_against_station(stripped_query, station),
+            _score_channel_against_station_name_only(stripped_query, station),
+            station,
+            sd_lineup_id,
+        )
+        for station, sd_lineup_id in candidate_pool.values()
+    ]
+    # Drop zero-relevance candidates before applying `limit` (backlog item
+    # 37 follow-on review finding): for a real (non-empty) query, a
+    # zero-score "match" carries no actual relevance signal — WRatio scored
+    # it 0 against every one of `name`/`callsign`/`affiliate` — so including
+    # it just pads the response with noise up to `limit` and makes a
+    # genuine "no matches" indistinguishable from "matches, but all
+    # terrible." Only this non-empty-query path filters; browse mode
+    # (handled above, before this point) intentionally keeps its `score:
+    # 0.0` entries since there's no query to be irrelevant to. This must
+    # happen *before* the `[:capped_limit]` slice below, not after, so a
+    # query that matches fewer than `limit` stations doesn't get padded out
+    # with zero-score noise to fill the page. `candidatePoolSize` (computed
+    # above, from `candidate_pool` directly) is intentionally unaffected —
+    # it documents the full dedup pool size *before* scoring/truncation, not
+    # a post-relevance-filter count.
+    scored = [entry for entry in scored if entry[0] > 0.0]
+    # Primary: the name/callsign/affiliate max score, descending. Secondary
+    # (tie-break only, never returned on the response): name-only score,
+    # descending — same rule `generate_suggestions` uses for its top-N
+    # cutoff, see this function's docstring. Final tie-break: station name
+    # ascending, for determinism even if the secondary score also ties.
+    scored.sort(key=lambda entry: (-entry[0], -entry[1], entry[2].name.lower()))
+
+    results = [
+        StationSearchCandidate(
+            stationID=station.stationID,
+            name=station.name,
+            callsign=station.callsign,
+            affiliate=station.affiliate,
+            logoUrl=station.logo.URL if station.logo else None,
+            sdLineupId=sd_lineup_id,
+            score=score,
+        )
+        for score, _name_only_score, station, sd_lineup_id in scored[:capped_limit]
+    ]
+    return StationSearchResult(
+        lineupId=lineup_id,
+        query=query,
+        resultCount=len(results),
+        candidatePoolSize=candidate_pool_size,
+        uncachedSdLineupIds=uncached_sd_lineup_ids,
+        results=results,
+    )
+
+
 __all__ = [
     "BULK_ACCEPT_THRESHOLD",
     "BULK_ACCEPT_TIE_EPSILON",
     "MAX_SUGGESTIONS_PER_CHANNEL",
+    "STATION_SEARCH_DEFAULT_LIMIT",
+    "STATION_SEARCH_MAX_LIMIT",
     "bulk_accept_suggestions",
     "enrich_channel_suggestions",
     "enrich_lineup_suggestions",
     "enrich_lineups_suggestions",
     "generate_suggestions",
+    "search_stations",
 ]
