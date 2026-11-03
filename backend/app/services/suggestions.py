@@ -116,6 +116,89 @@ STATION_SEARCH_MAX_LIMIT = 100
 #: channel entirely rather than guessing which tied candidate to confirm.
 BULK_ACCEPT_THRESHOLD = 0.92
 
+#: Minimum-relevance threshold (0-1 scale) for `search_stations`'s non-empty-
+#: query path (backlog item 37 UAT finding). Filters out candidates below
+#: this score entirely, *before* the `limit` cap — see that function's
+#: docstring for how this interacts with `limit`/`candidatePoolSize`.
+#:
+#: Why this exists: the filter this replaced (`score > 0.0`) was based on
+#: the theory that "a zero-score match carries no relevance signal," but
+#: `rapidfuzz.fuzz.WRatio` essentially never returns exactly `0.0` for two
+#: real, non-trivial-length strings — confirmed directly against a real
+#: cached 113-station roster during UAT: a 16-character nonsense query
+#: (`"zzqxnonsense9999"`, no genuine relationship to any station) returned
+#: 25 results scored 0.51 down to ~0.36, not an empty list. So `> 0.0` did
+#: essentially nothing against a realistic roster, and "no matches" was
+#: unreachable for almost any non-empty query.
+#:
+#: What was tested to pick 0.75 (throwaway script, not checked in):
+#: `fuzz.WRatio` + `default_process`, scored the same way `search_stations`
+#: scores (max across `name`/`callsign`/`affiliate`), against a built-up
+#: ~112-station roster shaped like a real combined OTA+cable SD lineup —
+#: major-network affiliates across a dozen US markets (3-4 letter
+#: callsigns, e.g. "KGO"/"WNYW") plus ~55 cable networks, several with
+#: short name/affiliate strings (e.g. "FX", "E!", "A&E", "CW", "BET",
+#: "TBS") — against two populations:
+#:
+#: - ~3,000 genuinely-unrelated random queries (random letters/alnum/
+#:   word-salad, lengths 2-24) representing "noise" with zero real
+#:   relationship to any station. These cluster heavily at 0.57-0.72
+#:   (the bulk, ~85% of the sample above the noise floor), with a median
+#:   around 0.60 — but a long tail (~8-10% of the sample) still reaches
+#:   exactly 0.90. That tail is a structural WRatio artifact, not a
+#:   near-match, and — despite the random *queries* being what's varied
+#:   in this test population — it is **not** a short-query phenomenon:
+#:   it's driven by very short (1-2 character, post-`default_process`)
+#:   *station* fields, e.g. a 2-3 character affiliate abbreviation like
+#:   "FX"/"CW", or "E!" normalizing to "e". Against a field that short,
+#:   `partial_ratio` stays pinned at ~0.90 for essentially any query up
+#:   to roughly 8-16x that field's length that happens to contain its
+#:   characters as a substring — confirmed directly: real, realistic-
+#:   length query words like "weekend", "movies", and "the news" each
+#:   score exactly 0.90 against "E!" purely because of this. The reach
+#:   of this tail scales with how short the *station field* is, not how
+#:   short the query is — the same "comparing very short strings via
+#:   partial_ratio is inherently noisy" effect `BULK_ACCEPT_THRESHOLD`'s
+#:   docstring documents, just landing on the query side of this
+#:   comparison instead of the channel-name side.
+#: - ~30 genuinely weak-but-real partial-match queries modeled on
+#:   plausible real search input — bare callsigns ("KGO"), abbreviated or
+#:   slightly misspelled real network names ("Comedy Ctrl", "Animal
+#:   Plnet", "Natl Geographic", "Sundance Channel" against a station
+#:   actually named "Sundance TV"), suffix/prefix noise ("ESPN2 HD",
+#:   "HGTV East"). These scored 0.80 (the single lowest, "Sundance
+#:   Channel") up to 1.0, with the bulk at 0.85-0.95.
+#:
+#: The two populations genuinely overlap in the 0.77-0.90 band — a handful
+#: of short random strings land exactly where real weak matches do, for
+#: the structural reason above, and no threshold value separates them
+#: there (same kind of irreducible ambiguity `BULK_ACCEPT_THRESHOLD`'s
+#: docstring calls out for its own score band, just a different band and a
+#: different root cause). `0.75` is chosen to sit in the one real gap the
+#: data showed: above the bulk/median of pure noise (every tested noise
+#: query below the 0.77-0.90 artifact tail scored <= 0.72) and below every
+#: genuinely weak real match this test found (lowest: 0.80), with a small
+#: margin either side rather than hugging either boundary exactly. It does
+#: **not** guarantee zero false positives — a query that happens to
+#: coincidentally contain a substring matching a very short (1-2
+#: character, post-normalization) station field like "E!"/"FX"/"CW" can
+#: still clear 0.75 (or even 0.90) with no real relevance behind it, and
+#: that's an acknowledged limitation of scoring short strings with
+#: WRatio, not something this threshold can fix. This is driven by how
+#: short the *station field* is, not how short the query is — it is
+#: **not** confined to short queries typed early into an as-you-type
+#: picker (where "no matches" is arguably not a meaningful concept
+#: anyway): it reaches any query up to roughly 8-16x the length of the
+#: short field it happens to contain (e.g. "weekend"/"movies" against
+#: "E!"), so realistic, non-trivial-length queries are not immune
+#: either. 0.75 still reliably distinguishes genuine noise from a
+#: genuine (if weak) partial match for the vast majority of queries —
+#: the case the UAT bug report and this threshold both target — but
+#: this specific tail, whose reach scales with how short a real
+#: station's field is rather than how short the query is, is the honest
+#: exception to that.
+STATION_SEARCH_MIN_RELEVANCE = 0.75
+
 #: Tie-break epsilon (same 0-1 scale) for `bulk_accept_suggestions`: two
 #: suggestions whose scores differ by no more than this are treated as
 #: tied. Needed because a channel named after a bare network affiliate
@@ -627,19 +710,32 @@ def search_stations(
       340" instead of a silently truncated list with no hint more exist.
       `candidatePoolSize` is unaffected by the zero-score filtering below —
       it's "before scoring/truncation," not "before relevance filtering."
-    - Minimum relevance for a non-empty query (follow-on review finding):
-      candidates scoring exactly `0.0` are dropped *before* the `limit` cap
-      is applied, so a non-empty query that genuinely matches nothing (e.g.
-      `q="xyzzy"`) returns an empty `results` list instead of up to `limit`
-      zero-relevance candidates ordered by the tie-break rule alone. This
-      filter only applies to the real-query path — browse mode (empty/
-      whitespace-only `query`, handled above) intentionally keeps every
-      candidate at `score=0.0`, since there's no query for them to be
-      irrelevant *to*. Consequently, an empty `results` list with an empty
-      `uncachedSdLineupIds` genuinely means "no matches found," not "matches
-      were found but none scored above some threshold" — there is no
-      nonzero minimum-score threshold here, just the exclusion of literal
-      zero scores.
+    - Minimum relevance for a non-empty query (UAT finding, replacing an
+      earlier `score > 0.0` filter): candidates scoring below
+      `STATION_SEARCH_MIN_RELEVANCE` are dropped *before* the `limit` cap is
+      applied, so a non-empty query that genuinely matches nothing (e.g.
+      `q="zzqxnonsense9999"`) returns an empty `results` list instead of up
+      to `limit` low-relevance candidates ordered by the tie-break rule
+      alone. The earlier `> 0.0` version of this filter turned out not to
+      work against a realistic roster — `rapidfuzz.fuzz.WRatio` essentially
+      never scores exactly `0.0` for two real, non-trivial-length strings,
+      so it let through everything; see `STATION_SEARCH_MIN_RELEVANCE`'s
+      docstring for the empirical investigation behind the replacement
+      threshold, including the honest caveat that it can't *fully*
+      eliminate false positives driven by very short station fields (not,
+      as it might appear, by short queries — see that docstring for why
+      the cause is the station side of the comparison). This filter only
+      applies to the real-query path — browse mode (empty/whitespace-only
+      `query`, handled above) intentionally keeps every candidate at
+      `score=0.0`, since there's no query for them to be irrelevant *to*.
+      Consequently, an empty `results` list with an empty
+      `uncachedSdLineupIds` means "no matches found" in the sense of
+      "nothing cleared the minimum-relevance bar" — not a guarantee that
+      every excluded candidate shared literally zero text with the query,
+      and not a claim that a result below the bar can never be a genuine
+      (if weak) match; see `STATION_SEARCH_MIN_RELEVANCE`'s docstring for
+      why that residual ambiguity is unavoidable with this scoring
+      function, same spirit as `BULK_ACCEPT_THRESHOLD`'s own caveat.
 
     Raises `services.lineups.NotFoundError` if no such lineup exists.
     """
@@ -698,22 +794,25 @@ def search_stations(
         )
         for station, sd_lineup_id in candidate_pool.values()
     ]
-    # Drop zero-relevance candidates before applying `limit` (backlog item
-    # 37 follow-on review finding): for a real (non-empty) query, a
-    # zero-score "match" carries no actual relevance signal — WRatio scored
-    # it 0 against every one of `name`/`callsign`/`affiliate` — so including
-    # it just pads the response with noise up to `limit` and makes a
-    # genuine "no matches" indistinguishable from "matches, but all
-    # terrible." Only this non-empty-query path filters; browse mode
-    # (handled above, before this point) intentionally keeps its `score:
-    # 0.0` entries since there's no query to be irrelevant to. This must
-    # happen *before* the `[:capped_limit]` slice below, not after, so a
-    # query that matches fewer than `limit` stations doesn't get padded out
-    # with zero-score noise to fill the page. `candidatePoolSize` (computed
-    # above, from `candidate_pool` directly) is intentionally unaffected —
-    # it documents the full dedup pool size *before* scoring/truncation, not
-    # a post-relevance-filter count.
-    scored = [entry for entry in scored if entry[0] > 0.0]
+    # Drop below-minimum-relevance candidates before applying `limit` (UAT
+    # finding, see `STATION_SEARCH_MIN_RELEVANCE`'s docstring): for a real
+    # (non-empty) query, a score below that threshold isn't a meaningful
+    # relevance signal, so including it just pads the response with noise
+    # up to `limit` and makes a genuine "no matches" indistinguishable from
+    # "matches, but all weak/irrelevant." The original version of this
+    # filter only dropped literal `0.0` scores, which `fuzz.WRatio`
+    # essentially never produces for real, non-trivial-length strings —
+    # see that docstring for the empirical data showing `> 0.0` let through
+    # most noise unfiltered. Only this non-empty-query path filters; browse
+    # mode (handled above, before this point) intentionally keeps its
+    # `score: 0.0` entries since there's no query to be irrelevant to. This
+    # must happen *before* the `[:capped_limit]` slice below, not after, so
+    # a query that matches fewer than `limit` stations above the threshold
+    # doesn't get padded out with low-relevance noise to fill the page.
+    # `candidatePoolSize` (computed above, from `candidate_pool` directly)
+    # is intentionally unaffected — it documents the full dedup pool size
+    # *before* scoring/truncation, not a post-relevance-filter count.
+    scored = [entry for entry in scored if entry[0] >= STATION_SEARCH_MIN_RELEVANCE]
     # Primary: the name/callsign/affiliate max score, descending. Secondary
     # (tie-break only, never returned on the response): name-only score,
     # descending — same rule `generate_suggestions` uses for its top-N
@@ -749,6 +848,7 @@ __all__ = [
     "MAX_SUGGESTIONS_PER_CHANNEL",
     "STATION_SEARCH_DEFAULT_LIMIT",
     "STATION_SEARCH_MAX_LIMIT",
+    "STATION_SEARCH_MIN_RELEVANCE",
     "bulk_accept_suggestions",
     "enrich_channel_suggestions",
     "enrich_lineup_suggestions",

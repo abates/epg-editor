@@ -56,6 +56,36 @@ def fox_station() -> dict:
     }
 
 
+def realistic_station_roster() -> list[dict]:
+    """A larger, realistic-shaped roster (OTA affiliates + cable networks,
+    several with short name/callsign/affiliate strings) for exercising
+    `STATION_SEARCH_MIN_RELEVANCE` against something closer to a real SD
+    lineup than the 2-station `kgo_station`/`fox_station` fixtures above —
+    see `test_search_stations_realistic_noise_query_returns_empty_results`.
+    Modeled on the roster used in the throwaway empirical investigation
+    behind that threshold (see `STATION_SEARCH_MIN_RELEVANCE`'s docstring
+    in `app/services/suggestions.py`), trimmed down for a test fixture.
+    """
+    entries = [
+        ("20101", "KGO-TV", "KGO", "ABC"),
+        ("20102", "WCBS New York", "WCBS", "CBS"),
+        ("20103", "WNBC New York", "WNBC", "NBC"),
+        ("20104", "FOX 5 New York", "WNYW", "FOX"),
+        ("20105", "WPIX New York", "WPIX", "CW"),
+        ("20106", "ESPN", None, "ESPN"),
+        ("20107", "CNN", None, "CNN"),
+        ("20108", "Discovery Channel", None, "Discovery Channel"),
+        ("20109", "History Channel", None, "History Channel"),
+        ("20110", "A&E", None, "A&E"),
+        ("20111", "TBS", None, "TBS"),
+        ("20112", "MeTV", None, "MeTV"),
+    ]
+    return [
+        {"stationID": sid, "name": name, "callsign": callsign, "affiliate": affiliate}
+        for sid, name, callsign, affiliate in entries
+    ]
+
+
 def make_lineup(sd_lineup_ids: list[str]) -> str:
     lineup = lineups_service.create_lineup("Living Room Antenna")
     lineups_service.update_lineup_sd_lineup_ids(lineup.id, sd_lineup_ids)
@@ -624,13 +654,27 @@ def test_enrich_channel_suggestions_noop_for_channel_with_no_mapping(tmp_path):
 
 
 def test_search_stations_ranks_matches_by_score(tmp_path):
+    """Two stations that both clear `STATION_SEARCH_MIN_RELEVANCE` against
+    the query, with genuinely different scores, to verify ranking order.
+    Deliberately doesn't reuse `fox_station()` for the second candidate --
+    it shares no real relationship with "KGO-TV" and scores 0.36 against
+    it, which the 0.75 minimum-relevance filter now (correctly) excludes;
+    see `test_search_stations_realistic_noise_query_returns_empty_results`
+    for that filter's own dedicated test."""
     from app.models.sd import SdLineupStationsResponse, SdStation
+
+    kgo_hd_station = {
+        "stationID": "10124",
+        "name": "KGO-TV HD",
+        "callsign": "KGOHD",
+        "affiliate": "ABC",
+    }
 
     lineup_id = make_lineup(["USA-OTA12345"])
     sd_cache.save_lineup_stations(
         "USA-OTA12345",
         SdLineupStationsResponse(
-            stations=[SdStation(**kgo_station()), SdStation(**fox_station())]
+            stations=[SdStation(**kgo_station()), SdStation(**kgo_hd_station)]
         ),
         base_dir=tmp_path,
     )
@@ -641,6 +685,7 @@ def test_search_stations_ranks_matches_by_score(tmp_path):
     assert result.query == "KGO-TV"
     station_ids = [r.stationID for r in result.results]
     assert station_ids[0] == "10123"
+    assert len(result.results) == 2
     scores = [r.score for r in result.results]
     assert scores == sorted(scores, reverse=True)
     assert result.results[0].score > result.results[1].score
@@ -675,16 +720,20 @@ def test_search_stations_matches_affiliate(tmp_path):
     assert result.results[0].stationID == "10456"
 
 
-def test_search_stations_non_empty_query_with_no_relevance_returns_empty_results(
+def test_search_stations_non_empty_query_with_literal_zero_score_returns_empty_results(
     tmp_path,
 ):
-    """Follow-on review finding: a non-empty query that matches nothing
-    meaningful must come back as an empty `results` list, not a list of
-    `limit` zero-score candidates ordered by the tie-break rule alone --
-    otherwise the response can never signal "genuinely no matches" for a
-    real query. `candidatePoolSize` must still reflect the full deduped
-    pool, since it's "before scoring/truncation," not "before relevance
-    filtering.\""""
+    """Degenerate case: a query engineered to score *exactly* `0.0` against
+    this tiny 2-station fixture must still come back as an empty `results`
+    list under `STATION_SEARCH_MIN_RELEVANCE` (0.0 is well below any sane
+    threshold) -- this was the original (UAT-reported-insufficient) `> 0.0`
+    filter's test case, kept because it's still a valid (if narrow) check
+    of the new filter too. It does *not* exercise the actual bug UAT found
+    -- see `test_search_stations_realistic_noise_query_returns_empty_results`
+    below for a query that scores nonzero (so the old `> 0.0` filter let it
+    through) but is still genuine noise that the new threshold must catch.
+    `candidatePoolSize` must still reflect the full deduped pool, since
+    it's "before scoring/truncation," not "before relevance filtering.\""""
     from app.models.sd import SdLineupStationsResponse, SdStation
 
     lineup_id = make_lineup(["USA-OTA12345"])
@@ -702,6 +751,63 @@ def test_search_stations_non_empty_query_with_no_relevance_returns_empty_results
     assert result.resultCount == 0
     assert result.candidatePoolSize == 2
     assert result.uncachedSdLineupIds == []
+
+
+def test_search_stations_realistic_noise_query_returns_empty_results(tmp_path):
+    """UAT repro (backlog item 37 bug report): against a realistic roster,
+    a genuinely-unrelated, non-trivial-length query scores *nonzero* --
+    `"zzqxnonsense9999"` against `realistic_station_roster()` scores 0.60
+    (confirmed via the throwaway investigation behind
+    `STATION_SEARCH_MIN_RELEVANCE`, see that constant's docstring), well
+    above `0.0` but below the 0.75 threshold. The old `score > 0.0` filter
+    would have let this through; the new `>= STATION_SEARCH_MIN_RELEVANCE`
+    filter must not."""
+    from app.models.sd import SdLineupStationsResponse, SdStation
+
+    lineup_id = make_lineup(["USA-MIXED12345"])
+    sd_cache.save_lineup_stations(
+        "USA-MIXED12345",
+        SdLineupStationsResponse(
+            stations=[SdStation(**s) for s in realistic_station_roster()]
+        ),
+        base_dir=tmp_path,
+    )
+
+    result = suggestions_service.search_stations(
+        lineup_id, "zzqxnonsense9999", base_dir=tmp_path
+    )
+
+    assert result.results == []
+    assert result.resultCount == 0
+    assert result.candidatePoolSize == len(realistic_station_roster())
+    assert result.uncachedSdLineupIds == []
+
+
+def test_search_stations_weak_but_real_partial_match_still_returned(tmp_path):
+    """Don't overcorrect: a genuinely weak (abbreviated/typo'd) but real
+    partial match must still clear `STATION_SEARCH_MIN_RELEVANCE` and be
+    returned. `"Discovery HD"` against a station named "Discovery Channel"
+    scores ~0.81 (confirmed via the same investigation referenced above) --
+    comfortably above the 0.75 threshold despite not being an exact or
+    near-exact match."""
+    from app.models.sd import SdLineupStationsResponse, SdStation
+
+    lineup_id = make_lineup(["USA-MIXED12345"])
+    sd_cache.save_lineup_stations(
+        "USA-MIXED12345",
+        SdLineupStationsResponse(
+            stations=[SdStation(**s) for s in realistic_station_roster()]
+        ),
+        base_dir=tmp_path,
+    )
+
+    result = suggestions_service.search_stations(
+        lineup_id, "Discovery HD", base_dir=tmp_path
+    )
+
+    assert result.resultCount == 1
+    assert result.results[0].stationID == "20108"
+    assert result.results[0].score >= suggestions_service.STATION_SEARCH_MIN_RELEVANCE
 
 
 def test_search_stations_skips_sd_lineup_with_no_cached_roster(tmp_path):

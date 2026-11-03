@@ -45,9 +45,12 @@ class StationSearchCandidate(BaseModel):
     #: every result when `query` is empty/whitespace-only (browse mode) —
     #: see `search_stations`'s docstring for why there's no real score to
     #: compute in that case. For a non-empty `query`, this is always
-    #: `> 0.0` — zero-score candidates are excluded from `results` entirely
-    #: rather than appearing with `score: 0.0` (see
-    #: `StationSearchResult.results`'s docstring).
+    #: `>= services.suggestions.STATION_SEARCH_MIN_RELEVANCE` — candidates
+    #: scoring below that threshold are excluded from `results` entirely
+    #: rather than appearing with a low `score` (see
+    #: `StationSearchResult.results`'s docstring and
+    #: `STATION_SEARCH_MIN_RELEVANCE`'s own docstring for why a literal
+    #: `> 0.0` filter wasn't sufficient).
     score: float
 
 
@@ -84,17 +87,26 @@ class StationSearchResult(BaseModel):
     #: SD lineups haven't been fetched yet" — instead of a misleadingly
     #: empty/incomplete result with no explanation.
     uncachedSdLineupIds: list[str] = Field(default_factory=list)
-    #: For a non-empty `query`, excludes every candidate that scored exactly
-    #: `0.0` (dropped before the `limit` cap, not just hidden) — a
-    #: zero-relevance "match" isn't a match, so a real search never
-    #: surfaces one just to pad the list out to `limit`. This means an
+    #: For a non-empty `query`, excludes every candidate scoring below
+    #: `services.suggestions.STATION_SEARCH_MIN_RELEVANCE` (dropped before
+    #: the `limit` cap, not just hidden) — a below-threshold score isn't
+    #: treated as a meaningful match, so a real search never surfaces one
+    #: just to pad the list out to `limit`. An earlier version of this
+    #: filter only excluded literal `0.0` scores; UAT found that threshold
+    #: didn't actually work against a realistic station roster (`WRatio`
+    #: essentially never scores exactly `0.0` for two real, non-trivial-
+    #: length strings) — see `STATION_SEARCH_MIN_RELEVANCE`'s docstring for
+    #: the empirical investigation behind the replacement. This means an
     #: empty `results` list combined with an empty `uncachedSdLineupIds`
-    #: genuinely means "no matches found," not "matches were found but
-    #: filtered below some score" or "data not ready yet" — the frontend
-    #: can rely on that distinction (see `uncachedSdLineupIds`'s docstring
-    #: for the "data not ready yet" half of that signal). Whitespace-only/
-    #: empty `query` ("browse mode") is the one exception: it intentionally
-    #: still returns every candidate with `score: 0.0`, since there's no
-    #: query for them to be irrelevant to — see `search_stations`'s
-    #: docstring.
+    #: means "nothing cleared the minimum-relevance bar" — not "data not
+    #: ready yet" (the frontend can rely on that distinction; see
+    #: `uncachedSdLineupIds`'s docstring for that half of the signal), but
+    #: also not an absolute guarantee that nothing excluded shared any
+    #: genuine relationship with the query — see
+    #: `STATION_SEARCH_MIN_RELEVANCE`'s docstring for the acknowledged,
+    #: unavoidable ambiguity in the score band right around that threshold.
+    #: Whitespace-only/empty `query` ("browse mode") is the one exception:
+    #: it intentionally still returns every candidate with `score: 0.0`,
+    #: since there's no query for them to be irrelevant to — see
+    #: `search_stations`'s docstring.
     results: list[StationSearchCandidate] = Field(default_factory=list)
