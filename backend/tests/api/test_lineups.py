@@ -113,15 +113,14 @@ def test_set_channel_mapping_happy_path(client):
 
     response = client.put(
         f"/api/lineups/{lineup_id}/channels/{channel_id}/mapping",
-        json={"sdStationId": "10123", "sdLineupId": "USA-OTA12345", "confirmed": True},
+        json={"sdStationId": "10123", "sdLineupId": "USA-OTA12345"},
     )
 
     assert response.status_code == 200
     mapping = response.json()["mapping"]
     assert mapping["sdStationId"] == "10123"
     assert mapping["sdLineupId"] == "USA-OTA12345"
-    assert mapping["confirmed"] is True
-    assert mapping["confirmedAt"] is not None
+    assert mapping["mappedAt"] is not None
 
 
 def test_update_channel_explicit_null_clears_field_omitted_field_unchanged(client):
@@ -180,7 +179,7 @@ def test_update_channel_rejects_null_name_without_corrupting_disk(client, tmp_pa
     assert get_response.json()[0]["channels"][0]["name"] == "KGO-TV"
 
 
-def test_update_sd_lineup_ids_rejects_removal_with_confirmed_mapping(client):
+def test_update_sd_lineup_ids_rejects_removal_with_mapped_channel(client):
     lineup_id = client.post("/api/lineups", json={"name": "Lineup"}).json()["id"]
     client.put(
         f"/api/lineups/{lineup_id}/sd-lineups",
@@ -191,7 +190,7 @@ def test_update_sd_lineup_ids_rejects_removal_with_confirmed_mapping(client):
     ).json()["id"]
     client.put(
         f"/api/lineups/{lineup_id}/channels/{channel_id}/mapping",
-        json={"sdStationId": "10123", "sdLineupId": "USA-OTA12345", "confirmed": True},
+        json={"sdStationId": "10123", "sdLineupId": "USA-OTA12345"},
     )
 
     response = client.put(
@@ -323,7 +322,7 @@ def test_set_channel_mapping_rejects_unassociated_sd_lineup(client):
 
     response = client.put(
         f"/api/lineups/{lineup_id}/channels/{channel_id}/mapping",
-        json={"sdStationId": "10123", "sdLineupId": "USA-OTA12345", "confirmed": True},
+        json={"sdStationId": "10123", "sdLineupId": "USA-OTA12345"},
     )
 
     assert response.status_code == 400

@@ -48,8 +48,8 @@ async def generate_suggestions(
     "/lineups/{lineup_id}/bulk-accept-suggestions", response_model=BulkAcceptResult
 )
 def bulk_accept_suggestions(lineup_id: str) -> BulkAcceptResult:
-    """Confirm every unconfirmed channel whose top suggestion clears the
-    fixed backend bulk-accept threshold.
+    """Set a mapping for every channel without a station mapped yet whose
+    top suggestion clears the fixed backend bulk-accept threshold.
 
     No request body: the threshold
     (`app.services.suggestions.BULK_ACCEPT_THRESHOLD`) is a fixed backend

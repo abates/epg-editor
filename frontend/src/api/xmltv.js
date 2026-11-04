@@ -35,7 +35,7 @@ export function getXmltvUrl(lineupId) {
  * does NOT answer `HEAD` automatically for a plain `@router.get`). This is a
  * cheap existence check - no response body is downloaded/parsed - and
  * reflects the real on-disk state rather than inferring it from anything
- * indirect (e.g. "has a confirmed mapping"), since the backend has no
+ * indirect (e.g. "has a mapped channel"), since the backend has no
  * persisted "generated" field to query directly.
  *
  * Network errors (offline, CORS misconfiguration, etc.) are treated as

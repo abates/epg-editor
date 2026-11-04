@@ -33,8 +33,7 @@ Not regenerable from SchedulesDirect — back this up, don't treat it as cache.
           "mapping": {
             "sdStationId": "10123",
             "sdLineupId": "USA-OTA-12345",
-            "confirmed": true,
-            "confirmedAt": "2026-10-29T00:10:00Z",
+            "mappedAt": "2026-10-29T00:10:00Z",
             "suggestions": [
               { "sdStationId": "10123", "sdLineupId": "USA-OTA-12345", "score": 0.97 },
               { "sdStationId": "10456", "sdLineupId": "USA-OTA-12345", "score": 0.41 }
@@ -69,18 +68,20 @@ Notes:
 - `missingSince`: `null` normally. When an `m3u`-sourced lineup is
   re-imported and this channel's `tvgId` (fallback: `number`) no longer
   appears in the new M3U, set this to the re-import timestamp instead of
-  deleting the channel — its confirmed mapping is preserved until the user
+  deleting the channel — its mapping is preserved until the user
   explicitly removes it in the UI. Re-importing again with the channel
   present clears it back to `null`.
-- `mapping` is `null`/absent until the user has at least suggestions computed;
-  `confirmed: false` with `suggestions` populated is the "needs review" state
-  the UI's bulk-accept flow operates on.
+- `mapping` is `null`/absent until the user has at least suggestions
+  computed. "Mapped" is derived purely from `sdStationId`/`sdLineupId` being
+  non-`null` — there is no separate gating boolean. `suggestions` populated
+  with `sdStationId` still `null` is the "needs review" state the UI's
+  bulk-accept flow operates on.
 - `suggestions` are recomputed (not accumulated) each time mapping suggestions
   are (re)run for a channel. Recomputed for *every* channel in the lineup,
-  including ones with an already-`confirmed` mapping — recomputation only
+  including ones that already have a mapped SD station — recomputation only
   ever replaces this `suggestions` list (a read-only "what else was
   considered" record for the UI); it never touches `sdStationId`/
-  `confirmed`/`confirmedAt`, so a confirmed mapping can't be silently
+  `sdLineupId`/`mappedAt`, so an existing mapping can't be silently
   changed by a later suggestion run. Capped at the top 5 highest-scoring
   candidates per channel (`MAX_SUGGESTIONS_PER_CHANNEL` in
   `backend/app/services/suggestions.py`) rather than every candidate in the

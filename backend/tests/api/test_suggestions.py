@@ -171,7 +171,7 @@ def test_bulk_accept_end_to_end(client):
 
     lineup = client.get(f"/api/lineups/{lineup_id}").json()
     good_channel = next(c for c in lineup["channels"] if c["id"] == channel_id)
-    assert good_channel["mapping"]["confirmed"] is True
+    assert good_channel["mapping"]["sdStationId"] is not None
     assert good_channel["mapping"]["sdStationId"] == "10123"
 
 

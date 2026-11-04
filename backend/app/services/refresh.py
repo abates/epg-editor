@@ -26,9 +26,10 @@ item 29's closing note. What makes this pipeline the "real" one:
   "respect SD's rate limits" point of this phase.
 
 Still respects "no speculative bulk-fetching": schedule/program data is
-only ever fetched for SD stations that are actually `confirmed`-mapped to a
-channel in some epg-editor lineup (via `services.xmltv
-.confirmed_mapped_channels`) — station *rosters* are the one exception,
+only ever fetched for SD stations that are actually mapped (`sdStationId`/
+`sdLineupId` set — see docs/backlog.md item 38) to a channel in some
+epg-editor lineup (via `services.xmltv.mapped_channels`) — station
+*rosters* are the one exception,
 refreshed for every SD lineup associated with any epg-editor lineup (not
 just mapped stations) because the roster itself is the candidate pool
 suggestion-generation draws from, not schedule/program data.
@@ -67,9 +68,9 @@ from app.sd_client.client import SdClient, SdClientError
 from app.services.lineups import list_lineups
 from app.services.xmltv import (
     GUIDE_WINDOW_DAYS,
-    confirmed_mapped_channels,
     generate_xmltv_for_lineup_id,
     guide_window_dates,
+    mapped_channels,
 )
 from app.storage import sd_cache
 
@@ -137,15 +138,14 @@ def _needs_schedule_fetch(
 
 
 def _distinct_mapped_station_ids(lineups: list[Lineup]) -> dict[str, set[str]]:
-    """`lineup.id -> {sdStationId, ...}` for every confirmed-mapped channel.
+    """`lineup.id -> {sdStationId, ...}` for every mapped channel.
 
-    Reuses `services.xmltv.confirmed_mapped_channels` rather than
-    re-deriving it, per CLAUDE.md's instruction to share, not duplicate,
-    that logic.
+    Reuses `services.xmltv.mapped_channels` rather than re-deriving it, per
+    CLAUDE.md's instruction to share, not duplicate, that logic.
     """
     result: dict[str, set[str]] = {}
     for lineup in lineups:
-        mapped = confirmed_mapped_channels(lineup)
+        mapped = mapped_channels(lineup)
         result[lineup.id] = {
             channel.mapping.sdStationId
             for channel in mapped
@@ -227,7 +227,7 @@ async def refresh_all_lineups(
         )
         result.stationRostersRefreshed += 1
 
-    # --- 3. Schedule refresh: md5-check every confirmed-mapped station ------
+    # --- 3. Schedule refresh: md5-check every mapped station ----------------
     station_ids_by_lineup = _distinct_mapped_station_ids(lineups)
     all_station_ids = sorted({sid for ids in station_ids_by_lineup.values() for sid in ids})
 

@@ -141,7 +141,8 @@ export function removeChannel(lineupId, channelId) {
 
 /**
  * Calls PUT /api/lineups/{lineupId}/channels/{channelId}/mapping to
- * directly set (or confirm) a channel's SD station mapping.
+ * directly set a channel's SD station mapping. Sending a station always
+ * means the channel is mapped - there's no separate confirmed flag.
  *
  * The backend returns 400 if `sdLineupId` isn't one of the lineup's
  * associated `sdLineupIds` - that case surfaces as a rejected promise with
@@ -150,14 +151,11 @@ export function removeChannel(lineupId, channelId) {
  *
  * @param {string} lineupId
  * @param {string} channelId
- * @param {{ sdStationId: string, sdLineupId: string, confirmed?: boolean }} params
+ * @param {{ sdStationId: string, sdLineupId: string }} params
  * @returns {Promise<unknown>} the updated channel.
  */
-export function setChannelMapping(lineupId, channelId, { sdStationId, sdLineupId, confirmed }) {
+export function setChannelMapping(lineupId, channelId, { sdStationId, sdLineupId }) {
   const body = { sdStationId, sdLineupId };
-  if (confirmed !== undefined) {
-    body.confirmed = confirmed;
-  }
 
   return request(
     `/api/lineups/${encodeURIComponent(lineupId)}/channels/${encodeURIComponent(channelId)}/mapping`,
@@ -198,7 +196,7 @@ export function generateSuggestions(lineupId) {
 
 /**
  * Calls POST /api/lineups/{lineupId}/bulk-accept-suggestions: confirms the
- * mapping for every channel with an unconfirmed mapping whose top
+ * mapping for every channel without a station mapped yet whose top
  * suggestion is unambiguously highest-scoring (ties are skipped, left for
  * manual review - intentional, not a bug) and at/above the backend's fixed
  * confidence threshold (not a UI control - see CLAUDE.md's Core workflow
@@ -207,7 +205,7 @@ export function generateSuggestions(lineupId) {
  *
  * The returned `BulkAcceptResult` doesn't include full updated `Channel`
  * objects either - callers must `getLineup(lineupId)` afterward to see the
- * newly-confirmed mappings (see `SuggestionsPanel`).
+ * newly-mapped channels (see `SuggestionsPanel`).
  *
  * Rejects with the extracted `detail` message for the backend's documented
  * error case: 404 (lineup doesn't exist).

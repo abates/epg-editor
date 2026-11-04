@@ -71,7 +71,8 @@ stored (`mapping.suggestions`).
 
 ## XMLTV generation inputs
 
-For each confirmed channel mapping, pull the station's cached schedule entries
+For each channel with a mapped SD station (`sdStationId`/`sdLineupId` set),
+pull the station's cached schedule entries
 for the desired guide window (e.g. next N days) and resolve each schedule
 entry's program ID to cached program metadata. Emit standard XMLTV
 `<channel>` and `<programme>` elements. Validate output against the XMLTV DTD

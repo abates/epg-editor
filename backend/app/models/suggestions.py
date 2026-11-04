@@ -33,8 +33,8 @@ class SuggestionResult(BaseModel):
     stationPoolSize: int
     #: Number of channels in the lineup that suggestions were (re)computed
     #: for. Currently always every channel in the lineup (see
-    #: `generate_suggestions`'s docstring for why confirmed channels aren't
-    #: excluded).
+    #: `generate_suggestions`'s docstring for why channels with
+    #: `sdStationId` already set aren't excluded).
     channelsScored: int
     channelSuggestionCounts: list[ChannelSuggestionCount] = Field(default_factory=list)
 

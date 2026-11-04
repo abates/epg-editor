@@ -5,9 +5,12 @@ Two independent operations live here:
 - `generate_suggestions`: scores every channel in a lineup against the
   candidate SD station pool drawn from its associated `sdLineupIds`, and
   (re)writes `channel.mapping.suggestions` for every channel.
-- `bulk_accept_suggestions`: confirms whichever *unconfirmed* channels'
-  top-scoring suggestion clears `BULK_ACCEPT_THRESHOLD`, a fixed backend
-  constant (per CLAUDE.md, explicitly not a request parameter/UI control).
+- `bulk_accept_suggestions`: confirms whichever channels with no
+  `sdStationId` set yet (see docs/backlog.md item 38 — "mapped" is derived
+  purely from `sdStationId`/`sdLineupId` presence, there is no separate
+  gating boolean) have a top-scoring suggestion that clears
+  `BULK_ACCEPT_THRESHOLD`, a fixed backend constant (per CLAUDE.md,
+  explicitly not a request parameter/UI control).
 
 Fuzzy-matching library: `rapidfuzz`, confirmed (not just evaluated) by the
 product owner per docs/backlog.md item 20 — see module-level constants
@@ -352,14 +355,14 @@ async def generate_suggestions(
 
     Every channel's `suggestions` list is recomputed wholesale (overwritten,
     never accumulated), per docs/data-model.md. This includes channels that
-    already have a *confirmed* mapping: recomputing only replaces the
-    `suggestions` list (a read-only "here's what else was considered" record
-    for the UI) and never touches `sdStationId`/`confirmed`/`confirmedAt`,
-    so it can't silently un-confirm or re-point an existing mapping. Scoring
-    is pure in-memory string comparison (no SD calls per channel), so
-    recomputing confirmed channels too costs nothing extra in SD API calls
-    and keeps the stored suggestions useful if the user later wants to
-    review/change a confirmed channel's mapping.
+    already have a mapped SD station (`sdStationId` set): recomputing only
+    replaces the `suggestions` list (a read-only "here's what else was
+    considered" record for the UI) and never touches `sdStationId`/
+    `sdLineupId`/`mappedAt`, so it can't silently re-point or clear an
+    existing mapping. Scoring is pure in-memory string comparison (no SD
+    calls per channel), so recomputing already-mapped channels too costs
+    nothing extra in SD API calls and keeps the stored suggestions useful
+    if the user later wants to review/change a mapped channel's mapping.
 
     Raises `services.lineups.NotFoundError` if no such lineup exists.
     Raises `sd_client.client.SdClientError` (uncaught, not collected) if
@@ -566,16 +569,17 @@ def bulk_accept_suggestions(
     *,
     threshold: float = BULK_ACCEPT_THRESHOLD,
 ) -> BulkAcceptResult:
-    """Confirm every unconfirmed channel whose top suggestion clears `threshold`.
+    """Confirm every not-yet-mapped channel whose top suggestion clears `threshold`.
 
-    Only considers channels with an existing, *unconfirmed* `mapping` that
-    has at least one suggestion — channels with no `mapping` yet (never had
-    `generate_suggestions` run) and channels already `confirmed` are left
-    untouched (an already-confirmed mapping represents explicit user intent
-    or a previous accept and is never silently overwritten by a later bulk
-    run). `suggestions` is left in place after accepting, as a visible
-    record of what was auto-accepted and why (per the task brief) — only
-    `sdStationId`/`sdLineupId`/`confirmed`/`confirmedAt` are updated.
+    Only considers channels with an existing `mapping` that has no
+    `sdStationId` set yet and has at least one suggestion — channels with no
+    `mapping` yet (never had `generate_suggestions` run) and channels that
+    already have a mapped SD station are left untouched (an existing mapping
+    represents explicit user intent or a previous accept and is never
+    silently overwritten by a later bulk run). `suggestions` is left in
+    place after accepting, as a visible record of what was auto-accepted and
+    why (per the task brief) — only `sdStationId`/`sdLineupId`/`mappedAt` are
+    updated.
 
     `threshold` defaults to the fixed backend constant `BULK_ACCEPT_THRESHOLD`
     and is not exposed as a request parameter at the API layer (per
@@ -605,7 +609,11 @@ def bulk_accept_suggestions(
 
         for channel in lineup.channels:
             mapping = channel.mapping
-            if mapping is None or mapping.confirmed or not mapping.suggestions:
+            if (
+                mapping is None
+                or mapping.sdStationId is not None
+                or not mapping.suggestions
+            ):
                 continue
             top = max(mapping.suggestions, key=lambda suggestion: suggestion.score)
             if top.score < threshold:
@@ -624,8 +632,7 @@ def bulk_accept_suggestions(
 
             mapping.sdStationId = top.sdStationId
             mapping.sdLineupId = top.sdLineupId
-            mapping.confirmed = True
-            mapping.confirmedAt = now
+            mapping.mappedAt = now
             confirmed.append(
                 ConfirmedSuggestion(
                     channelId=channel.id,

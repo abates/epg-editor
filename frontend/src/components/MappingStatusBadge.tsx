@@ -1,4 +1,5 @@
 import type { ChannelMapping } from '../types';
+import { isChannelMapped } from './channelMappingStatus';
 import { StatusBadge, type StatusTone } from './StatusBadge';
 
 interface MappingStatusBadgeProps {
@@ -6,10 +7,11 @@ interface MappingStatusBadgeProps {
 }
 
 /**
- * Renders a channel's mapping state - unmapped / pending confirmation /
- * confirmed - using the shared StatusBadge component. There's no
- * suggestion-scoring UI yet (Phase 3), so "pending" here just means a
- * mapping was set directly but not marked confirmed.
+ * Renders a channel's mapping state - unmapped / mapped - using the shared
+ * StatusBadge component. "Mapped" is derived from `sdStationId`/
+ * `sdLineupId` both being set (see `isChannelMapped`); there's no separate
+ * confirmed/unconfirmed boolean (backlog item 38) - a station is never set
+ * except as the user's final decision.
  */
 export function MappingStatusBadge({ mapping }: MappingStatusBadgeProps) {
   const { tone, label } = describeMapping(mapping);
@@ -17,11 +19,8 @@ export function MappingStatusBadge({ mapping }: MappingStatusBadgeProps) {
 }
 
 function describeMapping(mapping: ChannelMapping | null): { tone: StatusTone; label: string } {
-  if (!mapping || !mapping.sdStationId) {
+  if (!isChannelMapped(mapping)) {
     return { tone: 'pending', label: 'Unmapped' };
   }
-  if (!mapping.confirmed) {
-    return { tone: 'warning', label: 'Pending confirmation' };
-  }
-  return { tone: 'ok', label: 'Confirmed' };
+  return { tone: 'ok', label: 'Mapped' };
 }

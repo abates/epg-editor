@@ -51,7 +51,6 @@ class UpdateChannelRequest(BaseModel):
 class SetChannelMappingRequest(BaseModel):
     sdStationId: str
     sdLineupId: str
-    confirmed: bool = True
 
 
 # --- Routes --------------------------------------------------------------------
@@ -119,8 +118,8 @@ def delete_lineup(lineup_id: str) -> None:
 def update_sd_lineup_ids(lineup_id: str, body: UpdateSdLineupIdsRequest) -> Lineup:
     """Replace a lineup's associated SchedulesDirect lineup IDs.
 
-    Rejects (400) removing a SD lineup ID that a channel's confirmed
-    mapping still depends on (see `services.lineups.update_lineup_sd_lineup_ids`).
+    Rejects (400) removing a SD lineup ID that a channel's mapping still
+    depends on (see `services.lineups.update_lineup_sd_lineup_ids`).
 
     Enriched the same as `get_lineup`/`list_lineups` before returning — this
     lineup's channels keep whatever suggestions they already had, and the
@@ -213,7 +212,7 @@ def update_channel(
     rather than being persisted (see regression review finding).
 
     Enriched the same as `get_lineup`/`list_lineups` before returning —
-    this closes the gap where editing a channel with pending (unconfirmed)
+    this closes the gap where editing a not-yet-mapped channel with pending
     suggestions would otherwise return them with bare `sdStationId`s and no
     display fields, and `frontend/src/components/ChannelRow.tsx`'s
     `handleEditSubmit` replaces local state straight from this response
@@ -245,14 +244,16 @@ def remove_channel(lineup_id: str, channel_id: str) -> None:
 def set_channel_mapping(
     lineup_id: str, channel_id: str, body: SetChannelMappingRequest
 ) -> Channel:
-    """Directly confirm (or set) a channel's SD station mapping.
+    """Directly set a channel's SD station mapping.
 
     Rejects a `sdLineupId` that isn't one of the lineup's associated SD
-    lineups (see `services.lineups.set_channel_mapping`).
+    lineups (see `services.lineups.set_channel_mapping`). Setting
+    `sdStationId` always means mapped, full stop (docs/backlog.md item 38)
+    — there is no separate "confirmed" flag to pass.
 
     Enriched the same as every other `Channel`/`Lineup`-returning route
     here, for consistency — harmless but largely moot in practice today,
-    since a channel with a *confirmed* mapping (this route's main purpose)
+    since a channel with a mapped SD station (this route's main purpose)
     hides the suggestion-review UI on the frontend regardless of what the
     response's `suggestions` display fields contain.
     """
@@ -262,7 +263,6 @@ def set_channel_mapping(
             channel_id,
             sd_station_id=body.sdStationId,
             sd_lineup_id=body.sdLineupId,
-            confirmed=body.confirmed,
         )
     except lineups_service.NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

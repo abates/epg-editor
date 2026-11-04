@@ -7,8 +7,8 @@ Covers the Phase 1 peer-review findings:
   load-mutate-save race).
 - #3: explicitly clearing an optional channel field via `null` must
   actually clear it, distinct from omitting the field.
-- #4: removing a `sdLineupId` that a channel's confirmed mapping still
-  depends on must be rejected, not silently orphan the mapping.
+- #4: removing a `sdLineupId` that a channel's mapping still depends on
+  must be rejected, not silently orphan the mapping.
 """
 
 from __future__ import annotations
@@ -17,7 +17,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from app.models.lineup import ChannelMapping
 from app.services import lineups as lineups_service
+from app.storage.lineups import update_lineups
 
 
 @pytest.fixture(autouse=True)
@@ -235,10 +237,10 @@ def test_concurrent_delete_and_mutation_on_different_lineups_do_not_lose_updates
     assert len(reloaded_survivor.channels) == 1
 
 
-# --- #4: can't remove a sdLineupId a confirmed mapping depends on ----------
+# --- #4: can't remove a sdLineupId a mapped channel depends on -------------
 
 
-def test_update_sd_lineup_ids_rejects_removal_when_confirmed_mapping_depends_on_it():
+def test_update_sd_lineup_ids_rejects_removal_when_mapped_channel_depends_on_it():
     lineup = lineups_service.create_lineup("Lineup")
     lineups_service.update_lineup_sd_lineup_ids(lineup.id, ["USA-OTA12345"])
     channel = lineups_service.add_channel(lineup.id, name="KGO-TV")
@@ -247,7 +249,6 @@ def test_update_sd_lineup_ids_rejects_removal_when_confirmed_mapping_depends_on_
         channel.id,
         sd_station_id="10123",
         sd_lineup_id="USA-OTA12345",
-        confirmed=True,
     )
 
     with pytest.raises(lineups_service.ValidationError):
@@ -259,7 +260,7 @@ def test_update_sd_lineup_ids_rejects_removal_when_confirmed_mapping_depends_on_
     assert reloaded.channels[0].mapping.sdLineupId == "USA-OTA12345"
 
 
-def test_update_sd_lineup_ids_allows_removal_when_no_confirmed_mapping_depends_on_it():
+def test_update_sd_lineup_ids_allows_removal_when_no_mapped_channel_depends_on_it():
     lineup = lineups_service.create_lineup("Lineup")
     lineups_service.update_lineup_sd_lineup_ids(
         lineup.id, ["USA-OTA12345", "USA-CABLE67890"]
@@ -270,7 +271,6 @@ def test_update_sd_lineup_ids_allows_removal_when_no_confirmed_mapping_depends_o
         channel.id,
         sd_station_id="10123",
         sd_lineup_id="USA-OTA12345",
-        confirmed=True,
     )
 
     # Removing the *unused* sdLineupId is fine.
@@ -279,19 +279,39 @@ def test_update_sd_lineup_ids_allows_removal_when_no_confirmed_mapping_depends_o
     assert updated.sdLineupIds == ["USA-OTA12345"]
 
 
-def test_update_sd_lineup_ids_allows_removal_when_mapping_unconfirmed():
+def test_update_sd_lineup_ids_allows_removal_when_channel_has_no_mapping():
     lineup = lineups_service.create_lineup("Lineup")
     lineups_service.update_lineup_sd_lineup_ids(lineup.id, ["USA-OTA12345"])
-    channel = lineups_service.add_channel(lineup.id, name="KGO-TV")
-    lineups_service.set_channel_mapping(
-        lineup.id,
-        channel.id,
-        sd_station_id="10123",
-        sd_lineup_id="USA-OTA12345",
-        confirmed=False,
-    )
+    lineups_service.add_channel(lineup.id, name="KGO-TV")
 
-    # An unconfirmed (suggestion-only) mapping doesn't block removal.
+    # A channel with no mapping at all doesn't block removal.
     updated = lineups_service.update_lineup_sd_lineup_ids(lineup.id, [])
 
     assert updated.sdLineupIds == []
+
+
+def test_update_sd_lineup_ids_rejects_removal_for_bug_state_mapping():
+    """Backlog item 38's incidental bug fix: a mapping that has
+    `sdLineupId` set is now protected from being silently orphaned
+    regardless of the (now-removed) `confirmed` flag's old value — the old
+    guard only checked `confirmed`, so a channel stuck in the "has a
+    station, unconfirmed" bug state was previously *unprotected*. Simulate
+    that state directly (bypassing `set_channel_mapping`, which always sets
+    `sdLineupId`/`mappedAt` together now) to prove the guard itself is
+    correct independent of how the mapping was produced.
+    """
+    lineup = lineups_service.create_lineup("Lineup")
+    lineups_service.update_lineup_sd_lineup_ids(lineup.id, ["USA-OTA12345"])
+    channel = lineups_service.add_channel(lineup.id, name="KGO-TV")
+
+    def mutate(data):
+        target_lineup = next(l for l in data.lineups if l.id == lineup.id)
+        target_channel = next(c for c in target_lineup.channels if c.id == channel.id)
+        target_channel.mapping = ChannelMapping(
+            sdStationId="10123", sdLineupId="USA-OTA12345", mappedAt=None
+        )
+
+    update_lineups(mutate)
+
+    with pytest.raises(lineups_service.ValidationError):
+        lineups_service.update_lineup_sd_lineup_ids(lineup.id, [])

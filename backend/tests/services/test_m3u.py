@@ -302,7 +302,7 @@ def test_import_tvg_id_present_but_not_matching_falls_back_to_number(tmp_path):
 
 def test_import_tvg_id_match_is_order_independent_across_whole_file():
     """Regression for the HIGH-severity order-dependence bug: channel A
-    (tvgId="A.us", number="1.1") has a confirmed mapping. The file
+    (tvgId="A.us", number="1.1") has a mapping. The file
     contains two entries: one for a brand-new channel B that happens to
     reuse channel A's *old* number ("1.1"), and one that is genuinely
     channel A re-numbered (tvgId="A.us", number="2.2"). Regardless of
@@ -314,7 +314,7 @@ def test_import_tvg_id_match_is_order_independent_across_whole_file():
     """
     from app.services.m3u import _merge_entries
 
-    mapping = ChannelMapping(sdStationId="STATION_A", sdLineupId="USA-OTA", confirmed=True)
+    mapping = ChannelMapping(sdStationId="STATION_A", sdLineupId="USA-OTA")
 
     def make_lineup(now):
         channel_a = Channel(
@@ -347,7 +347,6 @@ def test_import_tvg_id_match_is_order_independent_across_whole_file():
         assert updated.tvgId == "A.us", order_name
         assert updated.mapping is not None, order_name
         assert updated.mapping.sdStationId == "STATION_A", order_name
-        assert updated.mapping.confirmed is True, order_name
 
         assert len(result.added) == 1, order_name
         added = result.added[0]
@@ -364,8 +363,7 @@ def test_import_pre_existing_tvg_id_match_not_reachable_via_live_number_index():
     found by peer review in the final pass's live de-dup indices
     (`by_tvg_id_live`/`by_number_live`).
 
-    Channel A pre-exists with tvgId="A.us", number="1.1" and a confirmed
-    mapping. The file contains two entries, in either order: one that is
+    Channel A pre-exists with tvgId="A.us", number="1.1" and a mapping. The file contains two entries, in either order: one that is
     genuinely channel A (tvgId="A.us", number="1.1" — resolved by pass 1),
     and one for a brand-new, unrelated channel B that merely happens to
     reuse the *same* number ("1.1") but a *different* tvgId ("B.us").
@@ -375,17 +373,17 @@ def test_import_pre_existing_tvg_id_match_not_reachable_via_live_number_index():
     pre-existing channel by pass 1/2 — not just channels newly created
     within the final pass. That let the second entry's number ("1.1")
     hit `by_number_live` and silently reassign channel A's identity
-    (tvgId, number) and steal its confirmed mapping onto what should have
+    (tvgId, number) and steal its mapping onto what should have
     been an unrelated new channel B — even though pass 1/2's
     `tvg_claimed_channel_ids` correctly refused this exact pairing.
 
     Regardless of file order, channel A must keep its own id/tvgId/number
-    and its confirmed mapping untouched, and channel B must be created as
+    and its mapping untouched, and channel B must be created as
     a brand-new, unmapped channel.
     """
     from app.services.m3u import _merge_entries
 
-    mapping = ChannelMapping(sdStationId="STATION_A", sdLineupId="USA-OTA", confirmed=True)
+    mapping = ChannelMapping(sdStationId="STATION_A", sdLineupId="USA-OTA")
 
     def make_lineup(now):
         channel_a = Channel(
@@ -414,7 +412,6 @@ def test_import_pre_existing_tvg_id_match_not_reachable_via_live_number_index():
         assert updated.number == "1.1", order_name
         assert updated.mapping is not None, order_name
         assert updated.mapping.sdStationId == "STATION_A", order_name
-        assert updated.mapping.confirmed is True, order_name
 
         assert len(result.added) == 1, order_name
         added = result.added[0]
@@ -440,8 +437,7 @@ def test_import_pre_existing_number_fallback_match_not_reachable_via_live_number
     a pre-existing channel resolved via pass 2 (not pass 1) is equally
     reachable through the final pass's live index.
 
-    Channel A pre-exists with *no* tvgId, number="1.1", and a confirmed
-    mapping — so it can only ever be matched by number. The file's first
+    Channel A pre-exists with *no* tvgId, number="1.1", and a mapping — so it can only ever be matched by number. The file's first
     entry has no tvgId either, so it resolves to channel A purely via
     pass 2's number fallback. The file's second entry has a different,
     non-matching tvgId ("B.us") but the same number ("1.1"); it must
@@ -450,7 +446,7 @@ def test_import_pre_existing_number_fallback_match_not_reachable_via_live_number
     """
     from app.services.m3u import _merge_entries
 
-    mapping = ChannelMapping(sdStationId="STATION_A", sdLineupId="USA-OTA", confirmed=True)
+    mapping = ChannelMapping(sdStationId="STATION_A", sdLineupId="USA-OTA")
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
     channel_a = Channel(id="a", tvgId=None, name="Channel A", number="1.1", mapping=mapping)
     lineup = Lineup(
@@ -492,7 +488,7 @@ def test_import_duplicate_new_entries_still_collapse_despite_pre_existing_claim(
     """
     from app.services.m3u import _merge_entries
 
-    mapping = ChannelMapping(sdStationId="STATION_A", sdLineupId="USA-OTA", confirmed=True)
+    mapping = ChannelMapping(sdStationId="STATION_A", sdLineupId="USA-OTA")
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
     channel_a = Channel(
         id="a", tvgId="A.us", name="Channel A", number="1.1", mapping=mapping
@@ -598,9 +594,9 @@ def test_import_does_not_match_stale_freed_up_number_within_same_import():
     assert result.added[0].id != "a"
 
 
-def test_import_preserves_confirmed_mapping_on_metadata_update(tmp_path):
+def test_import_preserves_mapping_on_metadata_update(tmp_path):
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    mapping = ChannelMapping(sdStationId="10123", sdLineupId="USA-OTA", confirmed=True)
+    mapping = ChannelMapping(sdStationId="10123", sdLineupId="USA-OTA")
     existing = Channel(id="c1", tvgId="A.us", name="Old Name", mapping=mapping)
     lineup = Lineup(
         id="lu1", name="L", source=LineupSource.M3U, createdAt=now, updatedAt=now,
@@ -615,7 +611,6 @@ def test_import_preserves_confirmed_mapping_on_metadata_update(tmp_path):
     assert updated.name == "New Name"
     assert updated.mapping is not None
     assert updated.mapping.sdStationId == "10123"
-    assert updated.mapping.confirmed is True
 
 
 def test_import_clears_missing_since_when_channel_reappears(tmp_path):

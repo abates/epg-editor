@@ -5,7 +5,6 @@ import { searchStations } from '../api/stations.js';
 import type { Channel, StationSearchCandidate, StationSearchResult } from '../types';
 import {
   Button,
-  CheckboxLabel,
   ErrorText,
   FormActions,
   FormGrid,
@@ -142,7 +141,6 @@ export function ChannelMappingForm({
 }: ChannelMappingFormProps) {
   const [sdStationId, setSdStationId] = useState(channel.mapping?.sdStationId ?? '');
   const [sdLineupId, setSdLineupId] = useState(channel.mapping?.sdLineupId ?? '');
-  const [confirmed, setConfirmed] = useState(channel.mapping?.confirmed ?? true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -220,7 +218,6 @@ export function ChannelMappingForm({
       const updated = (await setChannelMapping(lineupId, channel.id, {
         sdStationId: sdStationId.trim(),
         sdLineupId: sdLineupId.trim(),
-        confirmed,
       })) as Channel;
       onSaved(updated);
     } catch (err) {
@@ -386,17 +383,6 @@ export function ChannelMappingForm({
           until you add one below.
         </HelperText>
       )}
-      <FormActions>
-        <CheckboxLabel>
-          <input
-            type="checkbox"
-            checked={confirmed}
-            onChange={(event) => setConfirmed(event.target.checked)}
-            disabled={submitting}
-          />
-          Confirmed
-        </CheckboxLabel>
-      </FormActions>
       <FormActions>
         <Button type="submit" disabled={submitting}>
           {submitting ? 'Saving...' : 'Save mapping'}

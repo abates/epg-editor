@@ -60,8 +60,8 @@ interface ExistenceResult {
  * `backend/app/models/lineup.py`), so existence is determined truthfully
  * via a cheap `HEAD` request against the serving endpoint itself
  * (`checkXmltvExists`) rather than inferred from something indirect like
- * "has any confirmed mapping" - a lineup can have confirmed mappings
- * without a refresh/generation cycle having run yet. Re-checks whenever
+ * "has any mapped channel" - a lineup can have mapped channels without a
+ * refresh/generation cycle having run yet. Re-checks whenever
  * `lineupId` changes; does not currently re-check after a background
  * refresh completes elsewhere on the page (e.g. via `RefreshNowPanel`) -
  * a manual page reload picks that up, which is an acceptable gap for a
@@ -120,7 +120,7 @@ export function XmltvUrlPanel({ lineupId }: XmltvUrlPanelProps) {
     return (
       <NotGeneratedCard>
         XMLTV hasn&apos;t been generated for this lineup yet. It&apos;s written by the
-        scheduled/manual refresh pipeline once this lineup has confirmed channel mappings.
+        scheduled/manual refresh pipeline once this lineup has mapped channels.
       </NotGeneratedCard>
     );
   }

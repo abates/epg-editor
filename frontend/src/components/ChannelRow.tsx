@@ -128,7 +128,7 @@ export function ChannelRow({ lineupId, channel, sdLineupIds, onChanged, onRemove
       {channel.mapping?.sdStationId && (
         <MappingSummary>
           Mapped to station {channel.mapping.sdStationId} in lineup {channel.mapping.sdLineupId}
-          {channel.mapping.confirmedAt ? ` (confirmed ${channel.mapping.confirmedAt})` : ''}
+          {channel.mapping.mappedAt ? ` (mapped ${channel.mapping.mappedAt})` : ''}
         </MappingSummary>
       )}
 

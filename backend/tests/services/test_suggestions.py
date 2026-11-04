@@ -360,10 +360,10 @@ def test_name_only_tie_break_keeps_genuine_name_match_in_top_n(tmp_path):
     assert station_ids[0] == "GENUINE"
 
 
-# --- Confirmed channels are still recomputed (suggestions only) -------------
+# --- Already-mapped channels are still recomputed (suggestions only) -------
 
 
-def test_confirmed_channel_suggestions_recomputed_but_mapping_untouched(tmp_path):
+def test_mapped_channel_suggestions_recomputed_but_mapping_untouched(tmp_path):
     lineup_id = make_lineup(["USA-OTA12345"])
     channel = lineups_service.add_channel(lineup_id, name="KGO-TV")
     lineups_service.set_channel_mapping(
@@ -376,7 +376,6 @@ def test_confirmed_channel_suggestions_recomputed_but_mapping_untouched(tmp_path
     run(suggestions_service.generate_suggestions(lineup_id, sd_client, base_dir=tmp_path))
 
     updated = lineups_service.get_lineup(lineup_id).channels[0]
-    assert updated.mapping.confirmed is True
     assert updated.mapping.sdStationId == "10123"
     assert len(updated.mapping.suggestions) == 2
 
@@ -418,15 +417,14 @@ def test_bulk_accept_confirms_at_or_above_threshold_leaves_below_alone(tmp_path)
     updated = lineups_service.get_lineup(lineup_id)
     good_updated = next(c for c in updated.channels if c.id == good_channel.id)
     bad_updated = next(c for c in updated.channels if c.id == bad_channel.id)
-    assert good_updated.mapping.confirmed is True
     assert good_updated.mapping.sdStationId == "10123"
-    assert good_updated.mapping.confirmedAt is not None
-    assert bad_updated.mapping.confirmed is False
+    assert good_updated.mapping.mappedAt is not None
+    assert bad_updated.mapping.sdStationId is None
     # Suggestions remain visible even for the untouched channel.
     assert bad_updated.mapping.suggestions
 
 
-def test_bulk_accept_does_not_touch_already_confirmed_channels(tmp_path):
+def test_bulk_accept_does_not_touch_already_mapped_channels(tmp_path):
     lineup_id = make_lineup(["USA-OTA12345"])
     channel = lineups_service.add_channel(lineup_id, name="KGO-TV")
     lineups_service.set_channel_mapping(
@@ -523,7 +521,6 @@ def test_bulk_accept_skips_channel_with_tied_top_suggestions_for_different_stati
     assert result.confirmed == []
 
     updated = lineups_service.get_lineup(lineup_id).channels[0]
-    assert updated.mapping.confirmed is False
     assert updated.mapping.sdStationId is None
     # Suggestions remain visible for manual review.
     assert updated.mapping.suggestions
@@ -991,5 +988,4 @@ def test_bulk_accept_confirms_when_top_is_uniquely_highest_despite_other_high_sc
     confirmed_ids = {c.channelId for c in result.confirmed}
     assert channel.id in confirmed_ids
     updated = lineups_service.get_lineup(lineup_id).channels[0]
-    assert updated.mapping.confirmed is True
     assert updated.mapping.sdStationId == "10123"

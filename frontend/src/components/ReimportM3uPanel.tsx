@@ -97,7 +97,7 @@ export function ReimportM3uPanel({
       </Form>
       <HelperText>
         Re-parses the uploaded file and merges it into this lineup: matched
-        channels&apos; metadata is refreshed in place (confirmed mappings are
+        channels&apos; metadata is refreshed in place (mapped channels are
         preserved), unmatched entries are added as new channels, and existing
         channels no longer in the file are flagged missing rather than
         deleted - review them below.

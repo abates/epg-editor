@@ -100,7 +100,7 @@ def test_import_m3u_reimport_mix_of_new_updated_and_missing(client):
     assert kpix["missingSince"] is not None
 
 
-def test_import_m3u_reimport_preserves_confirmed_mapping(client):
+def test_import_m3u_reimport_preserves_mapping(client):
     create_response = client.post(
         "/api/lineups/import-m3u",
         data={"name": "HDHomeRun"},
@@ -115,7 +115,7 @@ def test_import_m3u_reimport_preserves_confirmed_mapping(client):
     )
     client.put(
         f"/api/lineups/{lineup_id}/channels/{channel_id}/mapping",
-        json={"sdStationId": "10123", "sdLineupId": "USA-OTA", "confirmed": True},
+        json={"sdStationId": "10123", "sdLineupId": "USA-OTA"},
     )
 
     client.post(
@@ -133,7 +133,6 @@ def test_import_m3u_reimport_preserves_confirmed_mapping(client):
     kgo = next(c for c in refreshed["channels"] if c["tvgId"] == "KGO.us")
     assert kgo["name"] == "KGO-TV HD"  # metadata updated
     assert kgo["mapping"]["sdStationId"] == "10123"  # mapping preserved
-    assert kgo["mapping"]["confirmed"] is True
 
 
 def test_import_m3u_rejects_reimport_into_manual_lineup(client):

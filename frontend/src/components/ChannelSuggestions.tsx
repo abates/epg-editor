@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { setChannelMapping } from '../api/lineups.js';
 import type { Channel, MappingSuggestion } from '../types';
 import { Button, ErrorText, SecondaryButton } from '../styles/primitives';
+import { isChannelMapped } from './channelMappingStatus';
 import { confidenceTone } from './mappingConfidence';
 import { StatusBadge } from './StatusBadge';
 
@@ -61,7 +62,7 @@ interface ChannelSuggestionsProps {
  * best-first by the backend - see `docs/data-model.md`'s `suggestions`
  * notes) with an Accept/Reject action per suggestion.
  *
- * Renders nothing if the channel's mapping is already confirmed (nothing
+ * Renders nothing if the channel already has a station mapped (nothing
  * to review) or `mapping.suggestions` is empty (nothing generated yet, or
  * no clean match was found).
  *
@@ -82,7 +83,7 @@ export function ChannelSuggestions({ lineupId, channel, onChanged }: ChannelSugg
 
   const suggestions = channel.mapping?.suggestions ?? [];
 
-  if (channel.mapping?.confirmed || suggestions.length === 0) {
+  if (isChannelMapped(channel.mapping ?? null) || suggestions.length === 0) {
     return null;
   }
 
@@ -100,7 +101,6 @@ export function ChannelSuggestions({ lineupId, channel, onChanged }: ChannelSugg
       const updated = (await setChannelMapping(lineupId, channel.id, {
         sdStationId: suggestion.sdStationId,
         sdLineupId: suggestion.sdLineupId,
-        confirmed: true,
       })) as Channel;
       onChanged(updated);
     } catch (err) {

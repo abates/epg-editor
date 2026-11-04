@@ -1,7 +1,8 @@
 """XMLTV document generation.
 
-For every channel in a lineup with a *confirmed* mapping, pulls that
-station's cached schedule entries (never fetches live — this module calls
+For every channel in a lineup with a mapped SD station (`sdStationId`/
+`sdLineupId` set — see docs/backlog.md item 38), pulls that station's
+cached schedule entries (never fetches live — this module calls
 `storage/`, never `sd_client/` or raw HTTP/file I/O directly, per
 CLAUDE.md's dependency direction) for a guide window of upcoming days,
 resolves each schedule entry's program ID against cached program metadata,
@@ -15,7 +16,7 @@ couple of days," which is enough for a guide grid to be useful immediately
 after generation; callers needing a deeper window can pass
 `guide_window_days` explicitly.
 
-Channels without a confirmed mapping are *omitted from the output
+Channels without a mapped SD station are *omitted from the output
 entirely* (no `<channel>` element, no `<programme>` elements) rather than
 included as an empty/placeholder channel — a `<channel>` with no programme
 data isn't useful to a guide consumer like Plex/Jellyfin, and this keeps
@@ -96,8 +97,11 @@ def _program_description(program: SdProgram) -> str | None:
     return None
 
 
-def confirmed_mapped_channels(lineup: Lineup) -> list[Channel]:
-    """Confirmed-mapped channels, with duplicate XMLTV ids filtered out.
+def mapped_channels(lineup: Lineup) -> list[Channel]:
+    """Channels with a mapped SD station, with duplicate XMLTV ids filtered out.
+
+    "Mapped" is derived purely from `sdStationId` (and `sdLineupId`) being
+    set — see docs/backlog.md item 38; there is no separate gating boolean.
 
     Two channels sharing a `tvgId` (or, in principle, a fallback bare
     channel `id`, though those are always unique UUIDs in practice) would
@@ -117,8 +121,8 @@ def confirmed_mapped_channels(lineup: Lineup) -> list[Channel]:
         channel
         for channel in lineup.channels
         if channel.mapping is not None
-        and channel.mapping.confirmed
         and channel.mapping.sdStationId
+        and channel.mapping.sdLineupId
     ]
 
     seen_ids: set[str] = set()
@@ -168,12 +172,12 @@ def build_xmltv_document(
 
     tv_el = ET.Element("tv", attrib={"generator-info-name": GENERATOR_INFO_NAME})
 
-    mapped_channels = confirmed_mapped_channels(lineup)
+    channels_to_emit = mapped_channels(lineup)
 
     # DTD requires all <channel> elements before any <programme> elements
     # (`<!ELEMENT tv (channel*, programme*)>`), so channels are built in a
     # first pass and programmes in a second.
-    for channel in mapped_channels:
+    for channel in channels_to_emit:
         channel_el = ET.SubElement(
             tv_el, "channel", attrib={"id": _channel_xmltv_id(channel)}
         )
@@ -182,7 +186,7 @@ def build_xmltv_document(
         if channel.logoUrl:
             ET.SubElement(channel_el, "icon", attrib={"src": channel.logoUrl})
 
-    for channel in mapped_channels:
+    for channel in channels_to_emit:
         mapping = channel.mapping
         assert mapping is not None and mapping.sdStationId is not None
         xmltv_channel_id = _channel_xmltv_id(channel)

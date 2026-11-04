@@ -32,15 +32,15 @@ export interface MappingSuggestion {
  * A channel's association with a SchedulesDirect station.
  *
  * `sdStationId`/`sdLineupId` are `null` until a suggestion is accepted or
- * the user sets a mapping directly via the manual-confirm endpoint.
- * `confirmed: false` with `suggestions` populated is the "needs review"
- * state the (future) bulk-accept flow operates on.
+ * the user sets a mapping directly via the mapping endpoint. A `null`
+ * `sdStationId` with `suggestions` populated is the "needs review" state
+ * the bulk-accept flow operates on - there's no separate confirmed/
+ * unconfirmed boolean; a non-null `sdStationId` always means mapped.
  */
 export interface ChannelMapping {
   sdStationId: string | null;
   sdLineupId: string | null;
-  confirmed: boolean;
-  confirmedAt: string | null;
+  mappedAt: string | null;
   suggestions: MappingSuggestion[];
 }
 

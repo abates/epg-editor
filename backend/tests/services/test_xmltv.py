@@ -58,12 +58,12 @@ def test_empty_lineup_produces_minimal_valid_document(tmp_path):
     assert "<programme" not in xml_text
 
 
-def test_channel_with_no_confirmed_mapping_is_skipped_not_errored(tmp_path):
+def test_channel_with_no_mapped_station_is_skipped_not_errored(tmp_path):
     unmapped_channel = Channel(id="ch1", name="Unmapped Channel")
     needs_review_channel = Channel(
         id="ch2",
         name="Needs Review Channel",
-        mapping=ChannelMapping(confirmed=False, suggestions=[]),
+        mapping=ChannelMapping(suggestions=[]),
     )
     lineup = make_lineup(channels=[unmapped_channel, needs_review_channel])
 
@@ -74,7 +74,7 @@ def test_channel_with_no_confirmed_mapping_is_skipped_not_errored(tmp_path):
     assert "<programme" not in xml_text
 
 
-def test_confirmed_mapping_with_cached_data_produces_programmes(tmp_path):
+def test_mapped_channel_with_cached_data_produces_programmes(tmp_path):
     channel = Channel(
         id="ch1",
         name="KGO-TV",
@@ -83,8 +83,7 @@ def test_confirmed_mapping_with_cached_data_produces_programmes(tmp_path):
         mapping=ChannelMapping(
             sdStationId="10123",
             sdLineupId="USA-OTA12345",
-            confirmed=True,
-            confirmedAt=datetime(2026, 10, 29, tzinfo=timezone.utc),
+            mappedAt=datetime(2026, 10, 29, tzinfo=timezone.utc),
         ),
     )
     lineup = make_lineup(channels=[channel])
@@ -149,7 +148,7 @@ def test_confirmed_mapping_with_cached_data_produces_programmes(tmp_path):
 
 
 def test_duplicate_tvg_id_is_skipped_not_merged(tmp_path, caplog):
-    # Two confirmed-mapped channels sharing a tvgId would otherwise produce
+    # Two mapped channels sharing a tvgId would otherwise produce
     # two <channel> elements with the same id attribute, which a consumer
     # effectively merges — keep the first, skip (and log) the rest, don't
     # crash generation.
@@ -158,7 +157,7 @@ def test_duplicate_tvg_id_is_skipped_not_merged(tmp_path, caplog):
         name="KGO-TV (first)",
         tvgId="KGO.us",
         mapping=ChannelMapping(
-            sdStationId="10123", sdLineupId="USA-OTA12345", confirmed=True
+            sdStationId="10123", sdLineupId="USA-OTA12345"
         ),
     )
     duplicate = Channel(
@@ -166,7 +165,7 @@ def test_duplicate_tvg_id_is_skipped_not_merged(tmp_path, caplog):
         name="KGO-TV (duplicate)",
         tvgId="KGO.us",
         mapping=ChannelMapping(
-            sdStationId="10124", sdLineupId="USA-OTA12345", confirmed=True
+            sdStationId="10124", sdLineupId="USA-OTA12345"
         ),
     )
     lineup = make_lineup(channels=[first, duplicate])
@@ -193,7 +192,7 @@ def test_tvg_id_with_dot_is_sanitized_in_xml_only(tmp_path):
         name="Channel 7.1",
         tvgId="7.1",
         mapping=ChannelMapping(
-            sdStationId="10123", sdLineupId="USA-OTA12345", confirmed=True
+            sdStationId="10123", sdLineupId="USA-OTA12345"
         ),
     )
     lineup = make_lineup(channels=[channel])
@@ -234,14 +233,14 @@ def test_tvg_id_with_dot_is_sanitized_in_xml_only(tmp_path):
 def test_tvg_ids_colliding_after_dot_sanitization_are_deduped(tmp_path, caplog):
     # Two different tvgIds that only differ by dot placement ("7.1" vs
     # "7-1") sanitize to the same XMLTV id. This must be caught by the
-    # existing dedup in confirmed_mapped_channels (which keys off the
+    # existing dedup in mapped_channels (which keys off the
     # sanitized id), not a second collision-handling mechanism.
     first = Channel(
         id="ch1",
         name="Channel 7.1",
         tvgId="7.1",
         mapping=ChannelMapping(
-            sdStationId="10123", sdLineupId="USA-OTA12345", confirmed=True
+            sdStationId="10123", sdLineupId="USA-OTA12345"
         ),
     )
     collider = Channel(
@@ -249,7 +248,7 @@ def test_tvg_ids_colliding_after_dot_sanitization_are_deduped(tmp_path, caplog):
         name="Channel 7-1 (literal dash)",
         tvgId="7-1",
         mapping=ChannelMapping(
-            sdStationId="10124", sdLineupId="USA-OTA12345", confirmed=True
+            sdStationId="10124", sdLineupId="USA-OTA12345"
         ),
     )
     lineup = make_lineup(channels=[first, collider])
@@ -271,7 +270,7 @@ def test_generate_xmltv_writes_file_atomically(tmp_path):
         id="ch1",
         name="KGO-TV",
         mapping=ChannelMapping(
-            sdStationId="10123", sdLineupId="USA-OTA12345", confirmed=True
+            sdStationId="10123", sdLineupId="USA-OTA12345"
         ),
     )
     lineup = make_lineup(channels=[channel])

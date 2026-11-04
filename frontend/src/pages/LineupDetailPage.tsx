@@ -151,7 +151,7 @@ export function LineupDetailPage({ lineupId, onBack }: LineupDetailPageProps) {
     const channelCount = lineup.channels.length;
     const confirmed = window.confirm(
       `Delete lineup "${lineup.name}"? This will permanently remove it and all ${channelCount} ` +
-        `channel${channelCount === 1 ? '' : 's'} in it, including any confirmed mappings. ` +
+        `channel${channelCount === 1 ? '' : 's'} in it, including any mapped channels. ` +
         'This cannot be undone.',
     );
     if (!confirmed) {

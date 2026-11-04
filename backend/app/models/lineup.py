@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Annotated
+from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 
 class LineupSource(str, Enum):
@@ -68,17 +68,52 @@ class MappingSuggestion(BaseModel):
 class ChannelMapping(BaseModel):
     """A channel's association with a SchedulesDirect station.
 
-    `confirmed=False` with `suggestions` populated is the "needs review"
-    state the (future) bulk-accept flow operates on. `sdStationId`/
+    "Mapped" is derived purely from `sdStationId`/`sdLineupId` being
+    non-`None` — there is no separate gating boolean (see docs/backlog.md
+    item 38). `suggestions` populated with `sdStationId` still `None` is the
+    "needs review" state the bulk-accept flow operates on. `sdStationId`/
     `sdLineupId` are `None` until a suggestion is accepted or the user sets
-    a mapping directly via the manual-confirm endpoint (Phase 1 item 8).
+    a mapping directly via the manual mapping-set endpoint (Phase 1 item 8).
+
+    `mappedAt` is a plain audit/diagnostic timestamp — "when was this
+    mapping set" — not a gate; it's set whenever `sdStationId` is set, and
+    left `None` otherwise.
     """
 
     sdStationId: str | None = None
     sdLineupId: str | None = None
-    confirmed: bool = False
-    confirmedAt: datetime | None = None
+    mappedAt: datetime | None = None
     suggestions: list[MappingSuggestion] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_confirmed_at(cls, data: Any) -> Any:
+        """Carry forward pre-item-38 `confirmed`/`confirmedAt` data.
+
+        Real production data (Andrew's own `/data/config/lineups.json`)
+        already has `ChannelMapping` records shaped like
+        `{"confirmed": true/false, "confirmedAt": "<timestamp>", ...}` from
+        before this refactor. Pydantic v2 silently drops unknown extra keys
+        on its own, which would otherwise lose the `confirmedAt` audit
+        timestamp for every mapping already on disk the first time it's
+        loaded and re-saved. This runs before field validation and, only
+        when the new `mappedAt` key isn't already present, copies a legacy
+        `confirmedAt` value over to `mappedAt`.
+
+        Deliberately does *not* try to recover a timestamp for the "bug
+        state" this refactor fixes (`sdStationId` set, `confirmed: false`,
+        `confirmedAt: null`) — there's no original timestamp to carry
+        forward there, and fabricating one with `now()` would misrepresent
+        when the mapping was actually set. That record simply loads with
+        `mappedAt = None`, and is correctly treated as mapped under the new
+        `sdStationId is not None` derivation — the intended behavioral fix,
+        not a gap.
+        """
+        if not isinstance(data, dict):
+            return data
+        if data.get("mappedAt") is None and data.get("confirmedAt") is not None:
+            data = {**data, "mappedAt": data["confirmedAt"]}
+        return data
 
 
 class Channel(BaseModel):

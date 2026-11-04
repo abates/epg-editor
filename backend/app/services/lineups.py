@@ -108,18 +108,26 @@ def delete_lineup(lineup_id: str) -> None:
 def update_lineup_sd_lineup_ids(lineup_id: str, sd_lineup_ids: list[str]) -> Lineup:
     """Replace a lineup's associated SD lineup IDs wholesale.
 
-    Rejects dropping an SD lineup ID that a channel's *confirmed* mapping
-    still points at. Without this check, removing a `sdLineupId` out from
-    under a confirmed mapping would silently orphan that mapping — the
-    station would no longer be in any SD lineup this epg-editor lineup
+    Rejects dropping an SD lineup ID that a channel's mapping still points
+    at (`mapping.sdLineupId` set — see docs/backlog.md item 38; there is no
+    separate gating boolean). Without this check, removing a `sdLineupId`
+    out from under a mapped channel would silently orphan that mapping —
+    the station would no longer be in any SD lineup this epg-editor lineup
     actually draws from, yet `services/xmltv.py` would still happily emit
     it (see Phase 1 review finding #4). We chose to *reject* the update
-    (400, listing the affected channels) rather than auto-clearing/
-    unconfirming those channels' mappings: a confirmed mapping represents
-    explicit user intent, and silently clearing it as a side effect of an
-    unrelated edit (editing the lineup's SD associations) seemed more
-    surprising than asking the user to deal with the affected channels
-    first (remap them or accept the removal explicitly).
+    (400, listing the affected channels) rather than auto-clearing those
+    channels' mappings: a set mapping represents explicit user intent, and
+    silently clearing it as a side effect of an unrelated edit (editing the
+    lineup's SD associations) seemed more surprising than asking the user
+    to deal with the affected channels first (remap them or accept the
+    removal explicitly).
+
+    Note (item 38): gating on `sdLineupId` presence instead of the old
+    `confirmed` boolean is itself a latent-bug fix, not just a rename — the
+    old guard didn't protect a channel stuck in the "has a station,
+    unconfirmed" bug state (the exact state item 37's UAT surfaced) from
+    having its `sdLineupId` silently orphaned, which is exactly what this
+    guard exists to prevent.
     """
     new_ids = set(sd_lineup_ids)
 
@@ -131,7 +139,7 @@ def update_lineup_sd_lineup_ids(lineup_id: str, sd_lineup_ids: list[str]) -> Lin
                 channel
                 for channel in lineup.channels
                 if channel.mapping is not None
-                and channel.mapping.confirmed
+                and channel.mapping.sdLineupId is not None
                 and channel.mapping.sdLineupId in removed_ids
             ]
             if affected:
@@ -140,8 +148,8 @@ def update_lineup_sd_lineup_ids(lineup_id: str, sd_lineup_ids: list[str]) -> Lin
                 )
                 raise ValidationError(
                     f"cannot remove sdLineupId(s) {sorted(removed_ids)!r} from "
-                    f"lineup {lineup_id!r}: channels have confirmed mappings "
-                    f"pointing at them: {affected_desc}"
+                    f"lineup {lineup_id!r}: channels have mappings pointing at "
+                    f"them: {affected_desc}"
                 )
         lineup.sdLineupIds = list(sd_lineup_ids)
         lineup.updatedAt = _now()
@@ -258,14 +266,17 @@ def set_channel_mapping(
     *,
     sd_station_id: str,
     sd_lineup_id: str,
-    confirmed: bool = True,
 ) -> Channel:
     """Directly set a channel's SD station mapping (no suggestion scoring).
 
     Rejects a `sd_lineup_id` that isn't one of the lineup's associated
-    `sdLineupIds` — a confirmed mapping pointing at an unassociated SD
-    lineup would be a silent data-integrity bug (the station wouldn't be in
-    any cached roster this lineup actually draws from).
+    `sdLineupIds` — a mapping pointing at an unassociated SD lineup would be
+    a silent data-integrity bug (the station wouldn't be in any cached
+    roster this lineup actually draws from).
+
+    Setting `sdStationId` always means mapped, full stop (see
+    docs/backlog.md item 38) — `mappedAt` is set unconditionally to the
+    current time whenever this is called.
     """
 
     def mutate(data: LineupsFile) -> Channel:
@@ -282,8 +293,7 @@ def set_channel_mapping(
         channel.mapping = ChannelMapping(
             sdStationId=sd_station_id,
             sdLineupId=sd_lineup_id,
-            confirmed=confirmed,
-            confirmedAt=now if confirmed else None,
+            mappedAt=now,
             suggestions=channel.mapping.suggestions if channel.mapping else [],
         )
         lineup.updatedAt = now

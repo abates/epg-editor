@@ -34,7 +34,7 @@ def _entry(**kwargs) -> M3UEntry:
 
 
 def _mapping(station_id: str) -> ChannelMapping:
-    return ChannelMapping(sdStationId=station_id, sdLineupId="USA-OTA", confirmed=True)
+    return ChannelMapping(sdStationId=station_id, sdLineupId="USA-OTA")
 
 
 def _lineup(*channels: Channel) -> Lineup:
