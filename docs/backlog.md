@@ -327,3 +327,55 @@ these touch the refresh pipeline itself.
     manual text-entry mode in `ChannelMappingForm` with a search-and-select
     UI; keep raw id entry available (e.g. behind an "advanced" toggle) as
     an escape hatch for a station that can't be found by search.
+38. **Refactor: drop `ChannelMapping.confirmed`, derive "mapped" from
+    `sdStationId`/`sdLineupId` presence** (`backend-developer` +
+    `frontend-developer`) — found via item 37's UAT: the search picker
+    inherits a stale `confirmed` value from the channel's prior mapping
+    state, so picking and saving a station can silently leave it
+    `confirmed: false` (excluded from XMLTV generation) with no obvious
+    indication why. Investigating *why* surfaced that the field is
+    redundant, not just mis-defaulted:
+    - Suggestion generation (`services/suggestions.py`) never sets
+      `sdStationId`/`sdLineupId` — it only populates the separate
+      `mapping.suggestions` list. The "needs review" state the model
+      docstring describes is `suggestions` populated with `sdStationId`
+      still `null`; that distinction already exists independently of
+      `confirmed`.
+    - Single accept, bulk-accept, and the manual/search form are the
+      *only* three places that ever set `sdStationId`/`sdLineupId` — all
+      three are explicit user actions, and the first two always pair that
+      with `confirmed: true` in the same call. No code path sets a station
+      "provisionally." The only way `confirmed` ever diverges from "has a
+      station" is the item-37 bug itself — not a feature the divergence
+      enables, the only thing it's ever produced.
+    - `update_lineup_sd_lineup_ids`'s orphan-protection check
+      (`services/lineups.py`, rejects removing an SD lineup id a channel's
+      mapping still points at) gates on `channel.mapping.confirmed`, not on
+      `sdLineupId` being set — so a channel stuck in the buggy
+      "has a station, unconfirmed" state is currently *unprotected* from
+      having its `sdLineupId` silently orphaned, the exact outcome that
+      guard exists to prevent. Deriving "mapped" from field-presence makes
+      this guard strictly more correct.
+    Scope:
+    - `models/lineup.py`: remove `ChannelMapping.confirmed`; rename
+      `confirmedAt` to `mappedAt`, set whenever `sdStationId` is set (kept
+      as a plain timestamp for audit/diagnostic purposes — "when did this
+      mapping get set" — not as a gate).
+    - `services/xmltv.py`'s `confirmed_mapped_channels` (and anywhere else
+      filtering on `.confirmed`): derive "mapped" as `sdStationId is not
+      None` instead.
+    - `services/lineups.py`'s `update_lineup_sd_lineup_ids` orphan guard:
+      gate on `sdLineupId` presence instead of `.confirmed`.
+    - `services/suggestions.py` (`generate_suggestions`,
+      `bulk_accept_suggestions`) and `api/lineups.py`'s mapping-confirm
+      endpoint: drop the `confirmed` request/response field; setting
+      `sdStationId` always means mapped, full stop.
+    - `frontend/src/components/ChannelMappingForm.tsx`: remove the
+      "Confirmed" checkbox — "Save mapping" always means mapped, matching
+      Accept/bulk-accept. Update `MappingStatusBadge`/`ChannelRow`'s
+      `confirmedAt` display to `mappedAt`.
+    - `docs/data-model.md`: update the schema and the "needs review"
+      explanation to match (suggestions-populated-with-null-sdStationId is
+      the needs-review state; no separate boolean).
+    Decided by Andrew after discussion (2026-11-04) — not an open question,
+    unlike item 36.
