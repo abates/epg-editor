@@ -225,8 +225,11 @@ The single backend process serves the JSON API, generated XMLTV files, and
 the static React app on one port, so these prefixes are reserved to avoid
 collisions (e.g. a lineup whose id/slug happens to be `api`):
 
-- `/api/*` — all JSON API routes (FastAPI routers).
+- `/api/*` — all JSON API routes (FastAPI routers), plus FastAPI's own
+  docs routes (`/api/docs`, `/api/redoc`, `/api/openapi.json` — moved off
+  the defaults so they can't collide with SPA routes).
 - `/xmltv/*` — all generated-guide output (e.g. `/xmltv/{lineup-id}.xml`).
+- `/assets/*` — the built frontend's static assets (`api/static.py`).
 - Everything else falls through to the static React app / its client-side
   router.
 
@@ -279,12 +282,13 @@ performance.
   2. Python stage (`backend`) installs backend dependencies with `uv`
      (`uv sync --frozen --no-dev`, from `backend/pyproject.toml` + `uv.lock`),
      copies the backend source, and copies the built frontend assets in at
-     `/app/frontend/dist`. **Real-world addition (found during release-
-     tooling work, not pre-specified):** `app/main.py` does not yet mount
-     those frontend assets anywhere (no `StaticFiles`/SPA-fallback route) —
-     the Dockerfile stages the artifact at a path ready for that wiring, but
-     nothing serves it yet. That wiring is a separate, still-open backend
-     task. The image's `CMD` runs `uv run --no-sync uvicorn app.main:app
+     `/app/frontend/dist` (pointed to by `EPG_EDITOR_FRONTEND_DIR`, set in
+     the image). `backend/app/api/static.py`'s `register_static_frontend`
+     (called from `app/main.py`) serves those assets: it mounts `/assets`
+     and installs a 404-exception-handler-based SPA fallback to
+     `index.html` for non-reserved paths (see that module's docstring for
+     why it's a 404 handler rather than a catch-all route). It no-ops when
+     no frontend build is present (local dev, tests). The image's `CMD` runs `uv run --no-sync uvicorn app.main:app
      --host 0.0.0.0 --port 8080`; the `--no-sync` matters because a bare
      `uv run` re-syncs (and pulls in the dev dependency group, over the
      network) on every container start otherwise.
@@ -378,9 +382,23 @@ epg-editor/
 
 ## Open decisions deferred to implementation time
 
-- Exact fuzzy-matching library/threshold for mapping suggestions.
-- Whether `config/lineups.json` becomes multiple files (one per lineup) once
-  real usage shows a single file is unwieldy — not a reason to add a database.
+- ~~Exact fuzzy-matching library/threshold for mapping suggestions.~~
+  Decided: `rapidfuzz` `fuzz.WRatio`, bulk-accept threshold `0.92` — see
+  "Map channels" above. Confirmed by Andrew against real use (2026-11-05)
+  as working okay for now; revisit only if real results warrant it.
+- ~~Whether `config/lineups.json` becomes multiple files (one per lineup).~~
+  Decided (2026-11-05): **stay a single file.** Splitting would make
+  lineup create/delete and the cross-lineup checks non-atomic across files,
+  require a schema migration of the one non-regenerable dataset, and add
+  partial-load failure modes — in exchange for performance/concurrency
+  gains that don't matter for a single user with a file this size. The
+  real risk (a buggy mutation saving bad data over everything) is
+  addressed instead by rolling backups of `lineups.json` (docs/backlog.md
+  item 39). Revisit only if: saves become noticeably slow or the file
+  reaches several MB; per-lineup export/import between installs is wanted
+  (prefer an export/import endpoint over changing storage layout); or
+  hand-editing the file becomes routine and its size gets in the way.
+  Still not a reason to add a database.
 - ~~Exact refresh interval default and its env var name.~~ Decided (Phase 5,
   item 31): `EPG_EDITOR_REFRESH_INTERVAL`, default 12 hours, 1-hour floor —
   see "Guide refresh" above.

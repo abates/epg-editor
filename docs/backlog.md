@@ -289,6 +289,9 @@ these touch the refresh pipeline itself.
     collision handling is needed. Once live against Andrew's real
     environment, confirm whether any other Plex-unsafe characters need the
     same treatment rather than guessing at a broader character set now.
+    **Closed (2026-11-05):** Andrew hasn't hit any other Plex-unsafe
+    characters in real use — treating this as fixed with `.` only. Any
+    further character turns up as a new bug report, not a reopening.
 35. **Feature: XMLTV link + copy-to-clipboard on the lineup page**
     (`frontend-developer`) — on `LineupDetailPage`, surface the lineup's
     full `/xmltv/{lineup-id}.xml` URL (absolute, the app's own origin) with
@@ -378,3 +381,22 @@ these touch the refresh pipeline itself.
       the needs-review state; no separate boolean).
     Decided by Andrew after discussion (2026-11-04) — not an open question,
     unlike item 36.
+39. **Feature: rolling backups of `config/lineups.json`** (`backend-developer`)
+    — outcome of the "split `lineups.json` per lineup?" discussion
+    (2026-11-05, decided: stay single-file — see CLAUDE.md "Open
+    decisions"). Atomic writes already protect against a crash mid-write;
+    what they don't protect against is the app itself saving *bad* data
+    (a buggy mutation) over every lineup at once. Before each save in
+    `storage/lineups.py`, rotate the current file into a small set of
+    backups in `config/` (e.g. `lineups.json.1` … `lineups.json.5`,
+    newest = `.1`), keeping the last 5. Default count of 5 is a starting
+    choice, not confirmed — adjust if Andrew prefers otherwise.
+    Constraints:
+    - Stays entirely inside `storage/` — no caller changes; still runs
+      under `update_lineups`'s `_LOCK` so rotation can't race a save.
+    - Skip rotation when there's no existing file (fresh install).
+    - Backups use the same 0644 mode as the live file (`_atomic.py`).
+    - A failure to rotate a backup must not prevent the real save — log
+      it and continue. (Never log file contents.)
+    - No restore UI; restoring is a manual copy, documented in
+      `docs/data-model.md` alongside the existing "back this up" note.

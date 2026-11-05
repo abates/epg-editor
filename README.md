@@ -8,8 +8,14 @@ any XMLTV-compatible media server at.
 
 ## Status
 
-Early planning stage — see [CLAUDE.md](CLAUDE.md) and [docs/](docs) for the
-architecture and data model this project is being built against.
+Usable and in day-to-day use; released images are published to
+`ghcr.io/abates/epg-editor`. Implemented: manual and M3U-imported lineups
+(including M3U re-import), fuzzy-matched mapping suggestions with bulk-accept, a searchable
+SchedulesDirect station picker, SchedulesDirect account lineup management,
+scheduled and on-demand guide refresh, and XMLTV generation/serving at
+`/xmltv/{lineup-id}.xml`. See [CLAUDE.md](CLAUDE.md) and [docs/](docs) for
+the architecture and data model, and [docs/backlog.md](docs/backlog.md) for
+what's done and what's next.
 
 ## Running
 
@@ -35,6 +41,11 @@ assume the backend is reachable at `:8080`. `uvicorn` defaults to port 8000
 if `--port` is omitted, so don't drop that flag in dev.
 
 Frontend (Vite + npm) — see [`frontend/README.md`](frontend/README.md).
+
+In the Docker image, the same `uvicorn` process also serves the built
+frontend (SPA, with client-side-route fallback to `index.html`) and the
+generated XMLTV files, all on port 8080. Interactive API docs are at
+`/api/docs`.
 
 ## Releasing
 
@@ -62,6 +73,7 @@ change before cutting an official release.
 | `SD_USERNAME` | yes | SchedulesDirect.org account username |
 | `SD_PASSWORD` | yes | SchedulesDirect.org account password |
 | `EPG_EDITOR_REFRESH_INTERVAL` | no | How often the background refresh job re-syncs SD data and regenerates XMLTV, in **hours** (the name has no `_HOURS` suffix, but the value is always a number of hours). Defaults to `12`. Values below `1` are clamped up to `1` hour, per SchedulesDirect's own request not to sync more than once an hour. A manual "refresh now" action (UI button / `POST /api/refresh-now`) runs the same pipeline on demand without affecting this schedule. |
+| `EPG_EDITOR_DATA_DIR` | no | Root of the persistent data tree (`config/`, `cache/`, `output/`). Defaults to `/data`; normally left alone and the volume mounted there instead. |
 
 All other app state (lineups, channels, mappings, generated XMLTV) lives on
 the `/data` volume — see [docs/data-model.md](docs/data-model.md).
