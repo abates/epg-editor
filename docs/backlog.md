@@ -400,3 +400,61 @@ these touch the refresh pipeline itself.
       it and continue. (Never log file contents.)
     - No restore UI; restoring is a manual copy, documented in
       `docs/data-model.md` alongside the existing "back this up" note.
+
+### Reported 2026-11-05 (Plex, real home deployment)
+
+Items 40–42 are **diagnose-first** bugs: the developer should find out the
+root cause and write it up in the item before fixing anything. If the fix
+needs a product decision (e.g. which of several image sources to prefer),
+stop and bring it to Andrew rather than picking one quietly. Each fix must
+stay client-neutral: emit standard, well-formed XMLTV that Plex happens to
+read correctly, with no Plex-specific branches or docs (per CLAUDE.md).
+Starting observation for all three (from a quick read, not a diagnosis):
+`services/xmltv.py`'s `build_xmltv_document` currently emits only
+`<title>` and `<desc>` per `<programme>`, and a channel `<icon>` only from
+the channel's own `logoUrl` (M3U `tvg-logo` or entered by hand), never
+from SchedulesDirect.
+
+40. **Bug: Plex shows no series name or episode info, and treats shows as
+    movies when recording** (`backend-developer`) — guide data shows up in
+    Plex, but programmes have no series/episode details, and clicking
+    "record" on a show offers to record it into the Movies library instead
+    of as a TV series. Diagnose which XMLTV elements Plex uses to tell a
+    series episode from a movie and to get its series/episode metadata
+    (likely candidates to check: `<episode-num>` in the `xmltv_ns` and/or
+    `dd_progid`/`onscreen` systems, `<sub-title>`, `<category>` such as
+    "Series"/"Movie", `<date>`, `<previously-shown>`/`<new>`), and
+    whether the SD program data we already cache (`/programs` responses
+    in `cache/sd/`) has the matching fields: SD program ID prefix
+    (`EP`/`SH`/`MV`/`SP`), `metadata` season/episode numbers, `episodeTitle150`,
+    `genres`, `entityType`/`showType`, original air date. Check whether
+    `models/` and `sd_client/` drop fields we'd need during parsing.
+    Done means: a real series episode in Plex shows its series name and
+    episode info and records as a TV episode; a real movie still records
+    as a movie. Confirm against Andrew's real Plex.
+41. **Bug: Plex doesn't show channel logos in the guide**
+    (`backend-developer`) — Andrew suspects this is about how Plex reads
+    XMLTV `<icon>` (or a non-standard `<image>`) on `<channel>`. Diagnose:
+    (a) what `<channel><icon src>` we actually emit for his real lineup;
+    many channels may have none if the M3U carried no `tvg-logo` (check his
+    real `lineups.json`/generated file); (b) whether the URLs we do emit
+    can be reached from the Plex server and return an image (e.g. an
+    HDHomeRun-local or expired URL); (c) whether Plex needs anything beyond
+    a standard `<icon src="...">`; (d) whether we should fall back to the
+    SD station logo (`stationLogo`/`logo` in the cached station roster, and
+    the SD logo endpoints noted in docs/schedulesdirect-integration.md)
+    when a channel has no `logoUrl`. That last one is a product decision:
+    SD logo URLs may need care around SD's image call limits and caching,
+    so bring the options to Andrew before building it.
+    Done means: channel logos appear in Andrew's real Plex guide.
+42. **Bug: episodes show no artwork in Plex** (`backend-developer`) —
+    like item 41 but for programmes: we emit no `<programme><icon>` (or
+    `<image>`) today. Diagnose what Plex reads for programme artwork, and
+    what SD offers for it (program artwork / `hasImageArtwork`, the
+    `/metadata/programs` endpoint and image URLs, plus any image-request
+    limits and caching SD expects). Expect this to need new `sd_client/`
+    calls and caching in `cache/sd/`, so write up the approach and its SD
+    call cost and bring it to Andrew before building. Likely depends on
+    item 40 (series vs. episode IDs decide which artwork applies).
+    Done means: series/episode artwork appears in Andrew's real Plex guide
+    without breaking SD's call limits.
