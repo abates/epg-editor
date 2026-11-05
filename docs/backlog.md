@@ -296,22 +296,21 @@ these touch the refresh pipeline itself.
     for Plex/Jellyfin. Only show it once a file has actually been
     generated (reuse the existing generation-status signal); show a
     "not generated yet" state otherwise rather than a dead link.
-36. **Feature + open decision: name the generated file after the lineup,
-    not its id** (`backend-developer` + `frontend-developer`) — conflicts
-    with the "stable HTTP path" guarantee CLAUDE.md locks in for
+36. ~~**Feature + open decision: name the generated file after the lineup,
+    not its id**~~ — **Dismissed by Andrew (2026-11-05), not implemented.**
+    Conflicted with the "stable HTTP path" guarantee CLAUDE.md locks in for
     `/xmltv/{lineup-id}.xml` (so a configured Plex/Jellyfin EPG URL never
-    breaks). Per Andrew, write up both options below and bring them back to
-    him for a decision before implementation starts:
-    - **(a) Cosmetic only, URL unchanged (recommended):** URL stays
-      `/xmltv/{lineup-id}.xml` forever; `api/xmltv.py`'s response sets
-      `Content-Disposition` so a manual download/save-as suggests the
-      lineup name as the filename. Nothing on disk changes, the stable-URL
-      guarantee is untouched.
-    - **(b) URL itself becomes name-derived:** e.g. `/xmltv/{slug}.xml`
-      from the lineup name. Friendlier URL, but renaming a lineup moves its
-      EPG URL — any already-configured Plex/Jellyfin source would need
-      re-pointing. Needs a collision rule for two lineups with the same (or
-      same-slugified) name.
+    breaks). Two options were written up:
+    - (a) Cosmetic only, URL unchanged: just set `Content-Disposition` on
+      the response so a manual download suggests the lineup name as the
+      filename, URL untouched.
+    - (b) URL itself becomes name-derived (e.g. `/xmltv/{slug}.xml`):
+      friendlier, but a lineup rename would move its EPG URL, breaking any
+      already-configured Plex/Jellyfin source, plus needing a new
+      slug-collision rule.
+    Andrew decided the rename-breaks-the-URL risk in (b) wasn't worth it,
+    and (a) wasn't compelling enough on its own to pursue — dismissing the
+    item rather than picking either option.
 37. **Feature: search Schedules Direct stations when mapping a channel**
     (`backend-developer` + `frontend-developer`) — today, when Phase 3's
     fuzzy suggestions don't surface the right station, the only fallback is
