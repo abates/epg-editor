@@ -476,5 +476,19 @@ from SchedulesDirect.
     calls and caching in `cache/sd/`, so write up the approach and its SD
     call cost and bring it to Andrew before building. Likely depends on
     item 40 (series vs. episode IDs decide which artwork applies).
+    **No Plex access:** same rule as items 40 and 41. The developer (and
+    any Claude agent working this item) has no direct access to Andrew's
+    Plex server and must not try to reach it. Every Plex-side check
+    (whether Plex shows programme artwork, what it shows for a specific
+    programme, whether the Plex host can fetch the image URLs we emit, Plex
+    logs) is done by Andrew from step-by-step instructions the developer
+    writes. Those instructions say exactly what to look at or run (e.g. a
+    `curl -I` from the Plex host against a few emitted image URLs), which
+    programmes to check (by name and air time from the generated XMLTV),
+    and what to send back (screenshots, exact text, command output).
+    Diagnose as far as possible from the code, cached SD data, and the
+    generated XMLTV first, then ask for only what's still missing.
     Done means: series/episode artwork appears in Andrew's real Plex guide
-    without breaking SD's call limits.
+    without breaking SD's call limits. Andrew confirms this using
+    verification steps the developer provides with the fix (including any
+    Plex-side refresh needed for it to pick up new artwork).
