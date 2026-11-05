@@ -429,24 +429,44 @@ from SchedulesDirect.
     (`EP`/`SH`/`MV`/`SP`), `metadata` season/episode numbers, `episodeTitle150`,
     `genres`, `entityType`/`showType`, original air date. Check whether
     `models/` and `sd_client/` drop fields we'd need during parsing.
+    **No Plex access:** the developer cannot reach Andrew's Plex server.
+    Anything that needs Plex (what Plex shows for a given programme, how it
+    classifies it, what it does on "record", its logs) is done by Andrew.
+    The developer writes step-by-step instructions for him: exactly what to
+    look at or run, which programmes or channels to check (by name and air
+    time from the generated XMLTV), and what to send back (screenshots,
+    exact text, log excerpts). Diagnose as far as possible from the code
+    and the generated XMLTV first, then ask for only what's still missing.
     Done means: a real series episode in Plex shows its series name and
     episode info and records as a TV episode; a real movie still records
-    as a movie. Confirm against Andrew's real Plex.
+    as a movie. Andrew confirms this using verification steps the developer
+    provides with the fix.
 41. **Bug: Plex doesn't show channel logos in the guide**
     (`backend-developer`) — Andrew suspects this is about how Plex reads
-    XMLTV `<icon>` (or a non-standard `<image>`) on `<channel>`. Diagnose:
+    XMLTV `<icon>` (or a non-standard `<image>`) on `<channel>`.
+    **No Plex access:** same rule as item 40. The developer can't reach
+    Andrew's Plex server, so every Plex-side check is done by Andrew from
+    step-by-step instructions the developer writes, saying what to run or
+    look at and what to send back. Diagnose:
     (a) what `<channel><icon src>` we actually emit for his real lineup;
-    many channels may have none if the M3U carried no `tvg-logo` (check his
-    real `lineups.json`/generated file); (b) whether the URLs we do emit
-    can be reached from the Plex server and return an image (e.g. an
-    HDHomeRun-local or expired URL); (c) whether Plex needs anything beyond
-    a standard `<icon src="...">`; (d) whether we should fall back to the
+    many channels may have none if the M3U carried no `tvg-logo` (if the
+    developer doesn't have his real `lineups.json`/generated XMLTV, ask
+    Andrew for it with instructions on where to find it); (b) whether the
+    URLs we do emit can be reached from the Plex server and return an image
+    (e.g. an HDHomeRun-local or expired URL). This has to be checked from
+    the Plex host itself, so give Andrew the exact command to run there
+    (e.g. a `curl -I` against a few of the emitted URLs) and what output to
+    report; (c) whether Plex needs anything beyond a standard
+    `<icon src="...">`; (d) whether we should fall back to the
     SD station logo (`stationLogo`/`logo` in the cached station roster, and
     the SD logo endpoints noted in docs/schedulesdirect-integration.md)
     when a channel has no `logoUrl`. That last one is a product decision:
     SD logo URLs may need care around SD's image call limits and caching,
     so bring the options to Andrew before building it.
-    Done means: channel logos appear in Andrew's real Plex guide.
+    Done means: channel logos appear in Andrew's real Plex guide. Andrew
+    confirms this using verification steps the developer provides with the
+    fix (including any Plex-side refresh needed for it to pick up new
+    logos).
 42. **Bug: episodes show no artwork in Plex** (`backend-developer`) —
     like item 41 but for programmes: we emit no `<programme><icon>` (or
     `<image>`) today. Diagnose what Plex reads for programme artwork, and
