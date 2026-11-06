@@ -19,6 +19,7 @@ from app.models.lineup import Channel, ChannelMapping, Lineup, LineupSource
 from app.models.sd import (
     SdProgram,
     SdProgramDescriptionEntry,
+    SdProgramMetadataEntry,
     SdProgramTitle,
     SdScheduleProgram,
     SdStationSchedule,
@@ -287,3 +288,213 @@ def test_generate_xmltv_for_lineup_id_raises_not_found(tmp_path):
 
     with pytest.raises(NotFoundError):
         xmltv_service.generate_xmltv_for_lineup_id("does-not-exist", base_dir=tmp_path)
+
+
+# --- Backlog item 40: series/episode metadata, movie-vs-series ------------
+
+
+def _single_channel_lineup_with_airing(
+    program: SdProgram, *, airing_new: bool | None = None
+) -> tuple[Lineup, Channel]:
+    channel = Channel(
+        id="ch1",
+        name="Test Channel",
+        mapping=ChannelMapping(sdStationId="10123", sdLineupId="USA-OTA12345"),
+    )
+    lineup = make_lineup(channels=[channel])
+    schedule = SdStationSchedule(
+        stationID="10123",
+        programs=[
+            SdScheduleProgram(
+                programID=program.programID,
+                airDateTime=datetime(2026, 10, 29, 0, 0, tzinfo=timezone.utc),
+                duration=1800,
+                new=airing_new,
+            ),
+        ],
+    )
+    return lineup, channel, schedule
+
+
+def _generate_single_programme(
+    program: SdProgram, *, airing_new: bool | None = None, tmp_path
+):
+    lineup, _channel, schedule = _single_channel_lineup_with_airing(
+        program, airing_new=airing_new
+    )
+    sd_cache.save_station_schedule("10123", "2026-10-29", schedule, base_dir=tmp_path)
+    sd_cache.save_program(program.programID, program, base_dir=tmp_path)
+
+    xml_text = xmltv_service.build_xmltv_document(
+        lineup, now=datetime(2026, 10, 29, tzinfo=timezone.utc), base_dir=tmp_path
+    )
+    validate_against_dtd(xml_text)
+    document = etree.fromstring(xml_text.encode("utf-8"))
+    programme_els = document.findall("programme")
+    assert len(programme_els) == 1
+    return programme_els[0]
+
+
+def test_series_episode_with_full_metadata_emits_episode_info(tmp_path):
+    program = SdProgram(
+        programID="EP012801050074",
+        titles=[SdProgramTitle(title120="Blue Bloods")],
+        episodeTitle150="Drawing Dead",
+        originalAirDate="2013-11-08",
+        entityType="Episode",
+        genres=["Crime drama"],
+        metadata=[{"Gracenote": SdProgramMetadataEntry(season=4, episode=7)}],
+    )
+
+    programme_el = _generate_single_programme(program, airing_new=True, tmp_path=tmp_path)
+
+    assert programme_el.find("title").text == "Blue Bloods"
+    assert programme_el.find("sub-title").text == "Drawing Dead"
+    assert programme_el.find("date").text == "20131108"
+
+    categories = [el.text for el in programme_el.findall("category")]
+    assert categories == ["Series", "Crime drama"]
+
+    episode_nums = {
+        el.get("system"): el.text for el in programme_el.findall("episode-num")
+    }
+    assert episode_nums["dd_progid"] == "EP01280105.0074"
+    assert episode_nums["xmltv_ns"] == "3.6."
+    assert episode_nums["onscreen"] == "S04E07"
+
+    assert programme_el.find("new") is not None
+    assert programme_el.find("previously-shown") is None
+
+
+def test_series_episode_without_season_episode_metadata_still_gets_dd_progid(tmp_path):
+    # SD's "SH"-prefixed generic series reference: entityType "Series", no
+    # episodeTitle150, no season/episode metadata — still enough to tell a
+    # consumer "this belongs to a series" via dd_progid alone.
+    program = SdProgram(
+        programID="SH012599310000",
+        titles=[SdProgramTitle(title120="Hot in Cleveland")],
+        entityType="Series",
+    )
+
+    programme_el = _generate_single_programme(program, tmp_path=tmp_path)
+
+    assert programme_el.find("sub-title") is None
+    categories = [el.text for el in programme_el.findall("category")]
+    assert categories == ["Series"]
+
+    episode_nums = {
+        el.get("system"): el.text for el in programme_el.findall("episode-num")
+    }
+    assert episode_nums == {"dd_progid": "SH01259931.0000"}
+
+
+def test_movie_gets_no_episode_num(tmp_path):
+    program = SdProgram(
+        programID="MV000158920000",
+        titles=[SdProgramTitle(title120="Raiders of the Lost Ark")],
+        entityType="Movie",
+        showType="Feature Film",
+        genres=["Adventure", "Action"],
+    )
+
+    programme_el = _generate_single_programme(program, tmp_path=tmp_path)
+
+    assert programme_el.find("episode-num") is None
+    assert programme_el.find("sub-title") is None
+    categories = [el.text for el in programme_el.findall("category")]
+    assert categories == ["Movie", "Adventure", "Action"]
+
+
+def test_show_entity_type_gets_series_treatment(tmp_path):
+    # "Show" is one of SD's documented entityType values that isn't in any
+    # small hand-enumerated "series" allowlist — it must still fall on the
+    # series side of the movie/series split (fail-safe-toward-series
+    # classification, docs/backlog.md item 40 peer-review fix) and get at
+    # least a dd_progid episode-num, not be silently treated as a movie.
+    program = SdProgram(
+        programID="SH012599310000",
+        titles=[SdProgramTitle(title120="Some Talk Show")],
+        entityType="Show",
+    )
+
+    programme_el = _generate_single_programme(program, tmp_path=tmp_path)
+
+    categories = [el.text for el in programme_el.findall("category")]
+    assert categories == ["Series"]
+    episode_nums = {
+        el.get("system"): el.text for el in programme_el.findall("episode-num")
+    }
+    assert episode_nums == {"dd_progid": "SH01259931.0000"}
+
+
+def test_tv_movie_entity_type_is_treated_as_movie(tmp_path):
+    # "TV Movie" is explicitly enumerated in _MOVIE_ENTITY_TYPES alongside
+    # "Movie" and "Paid Program" — standalone, non-episodic content.
+    program = SdProgram(
+        programID="MV000158920000",
+        titles=[SdProgramTitle(title120="A Made-for-TV Movie")],
+        entityType="TV Movie",
+        genres=["Drama"],
+    )
+
+    programme_el = _generate_single_programme(program, tmp_path=tmp_path)
+
+    assert programme_el.find("episode-num") is None
+    assert programme_el.find("sub-title") is None
+    categories = [el.text for el in programme_el.findall("category")]
+    assert categories == ["Movie", "Drama"]
+
+
+def test_entity_type_missing_falls_back_to_programid_prefix(tmp_path):
+    # Simulates a program cached by a pre-item-40 version of this app: no
+    # entityType/metadata on disk, same as a fresh model default. The "EP"
+    # programID prefix alone should still be enough to classify it as a
+    # series episode.
+    program = SdProgram(
+        programID="EP012345600991",
+        titles=[SdProgramTitle(title120="Some Show")],
+    )
+    assert program.entityType is None
+    assert len(program.programID) == 14
+
+    programme_el = _generate_single_programme(program, tmp_path=tmp_path)
+
+    categories = [el.text for el in programme_el.findall("category")]
+    assert categories == ["Series"]
+    episode_nums = {
+        el.get("system"): el.text for el in programme_el.findall("episode-num")
+    }
+    assert episode_nums == {"dd_progid": "EP01234560.0991"}
+
+
+def test_previously_shown_emitted_for_rerun_airing(tmp_path):
+    # SD's real responses never actually send "new": false explicitly (see
+    # test_missing_new_flag_emitted_as_previously_shown below for the
+    # realistic case) but False should behave identically to missing/None
+    # per SD's own "absent boolean means False" documentation.
+    program = SdProgram(
+        programID="EP012345600991",
+        titles=[SdProgramTitle(title120="Some Show")],
+        entityType="Episode",
+    )
+
+    programme_el = _generate_single_programme(program, airing_new=False, tmp_path=tmp_path)
+
+    assert programme_el.find("previously-shown") is not None
+    assert programme_el.find("new") is None
+
+
+def test_missing_new_flag_emitted_as_previously_shown(tmp_path):
+    # The realistic case: SD omits `new` entirely for a rerun rather than
+    # sending `"new": false` (API-20141201.md: an absent optional boolean
+    # means False). `airing.new` is `None` here, same as real SD data.
+    program = SdProgram(
+        programID="EP012345600991",
+        titles=[SdProgramTitle(title120="Some Show")],
+        entityType="Episode",
+    )
+
+    programme_el = _generate_single_programme(program, airing_new=None, tmp_path=tmp_path)
+
+    assert programme_el.find("previously-shown") is not None
+    assert programme_el.find("new") is None

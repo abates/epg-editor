@@ -441,6 +441,188 @@ from SchedulesDirect.
     episode info and records as a TV episode; a real movie still records
     as a movie. Andrew confirms this using verification steps the developer
     provides with the fix.
+
+    **Diagnosis (2026-11-06):** confirmed both halves of the starting
+    observation.
+    - `services/xmltv.py`'s `build_xmltv_document` really did emit only
+      `<title>`/`<desc>` per `<programme>` — no `<episode-num>`,
+      `<sub-title>`, `<category>`, `<date>`, `<new>`/`<previously-shown>`
+      at all, regardless of what SD's cached program data had.
+    - `models/sd.py`'s `SdProgram` already carried `episodeTitle150`,
+      `originalAirDate`, and `genres` from SD's `/programs` response, but
+      silently dropped `entityType`, `showType`, and `metadata` (SD's
+      season/episode numbers) — `SdModel`'s `extra="ignore"` means these
+      were present in SD's raw JSON (and in `cache/sd/programs/*.json`'s
+      underlying data, when passed through) but discarded on parse, not
+      recoverable from the cache without a Pydantic field to hold them.
+      Verified field names/shapes against SchedulesDirect/JSON-Service's
+      wiki (`API-20141201.md`, `API-20141201-Program-Response.md`) rather
+      than guessing — see docs/schedulesdirect-integration.md's new
+      "Program metadata used for series/episode info" section for the
+      specifics, including the exact `programID` structure (`EP`/`SH`/
+      `MV`/... 2-letter prefix + 12 digits, last 4 identifying the specific
+      episode) and SD's own documented caveat that `entityType`, not the
+      prefix, is the authoritative movie-vs-episode signal.
+    - Plex's XMLTV importer's recognition rules themselves aren't
+      something this developer could pull from a canonical Plex spec
+      page (Plex doesn't publish one) — the applicable behavior is
+      instead the de facto standard used by the SD-sourced XMLTV
+      ecosystem Plex's grabber was built to work with: zap2xml's
+      `dd_progid`-system `<episode-num>` (the SD programID itself,
+      reformatted) is the strongest signal that a programme belongs to a
+      series rather than being a standalone movie, with `xmltv_ns`/
+      `onscreen`-system `<episode-num>` and a `<category>` of
+      `"Series"`/`"Movie"` as supporting signals. Fixed by implementing
+      against the XMLTV DTD's own documented element semantics/ordering
+      (vendored at `backend/tests/fixtures/xmltv.dtd`) plus this
+      widely-used `dd_progid` convention — not a Plex-specific branch, per
+      CLAUDE.md's client-neutral requirement; a standards-compliant XMLTV
+      consumer built the same way SD-sourced grabbers are would read this
+      correctly regardless of which guide app it is.
+
+    **Fix:**
+    - `backend/app/models/sd.py`: `SdProgram` gained `entityType`,
+      `showType`, and `metadata` (`list[dict[str, SdProgramMetadataEntry]]`,
+      a new `SdProgramMetadataEntry` model for the season/episode/
+      totalEpisodes/totalSeasons value) plus a `primary_season_episode()`
+      helper. No `sd_client/` changes needed — `get_programs` already
+      validates every `/programs` item against `SdProgram`, so the new
+      fields flow through automatically once declared on the model.
+    - `backend/app/services/xmltv.py`: `build_xmltv_document` now emits,
+      in the DTD-required order, `<sub-title>` (from `episodeTitle150`),
+      `<date>` (from `originalAirDate`, digits-only), `<category>` (a
+      `"Movie"`/`"Series"` classification from the new `_is_movie`/
+      `_is_series_episode` helpers, plus every SD genre), `<episode-num>`
+      (a `dd_progid` entry for every series episode — even with no
+      season/episode numbers from SD, since that alone is the fix for
+      "recorded as a movie" — plus `xmltv_ns`/`onscreen` entries when SD's
+      `metadata` supplies season/episode numbers), and `<new>`/
+      `<previously-shown>` (from the schedule airing's own `new` flag,
+      not the program record). Movies get a `"Movie"` category and no
+      `<episode-num>`/`<sub-title>` at all. `_is_movie`/`_is_series_episode`
+      prefer `entityType` and fall back to the `programID` prefix only
+      when `entityType` is absent (see the cache-migration note below).
+    - Tests: `backend/tests/services/test_xmltv.py` gained cases for a
+      fully-populated series episode, an "SH"-style series reference with
+      no season/episode numbers (still gets `dd_progid`), a movie (no
+      episode-num), the `entityType`-missing programID-prefix fallback,
+      and the `new`/`previously-shown` airing-flag behavior. Full suite
+      (`uv run pytest`, 302 tests) and DTD validation both pass; no lint
+      tool is currently configured for the backend (checked — not an
+      oversight in this fix).
+    - `docs/schedulesdirect-integration.md`: new section documenting the
+      `/programs` fields consulted above and their provenance.
+
+    **Peer review follow-up (2026-11-06):** `peer-reviewer` caught two
+    correctness bugs in the fix above before it shipped, both fixed in
+    the same uncommitted change set (test suite now at 304):
+    - **`new`/`previously-shown` was inverted.** The original code only
+      acted when `airing.new` was explicitly `True` or `False`, treating
+      a missing value as "unknown, emit neither." But per SD's own docs
+      (`API-20141201.md`), an absent optional boolean means *assume
+      false* — SD's real responses never send `"new": false` for a
+      rerun, they just omit the key. So in practice `airing.new` is only
+      ever `True` or `None`, and the original logic meant every real
+      rerun got neither element. Fixed: `<new/>` only when `new is True`;
+      everything else (`False` or missing) now emits
+      `<previously-shown/>`.
+    - **`entityType` classification missed `Show` (and any other
+      unenumerated value).** The original `_SERIES_ENTITY_TYPES` allowlist
+      named only `Episode`/`Series`/`Miniseries`/`Sport-Related Episode`
+      out of SD's ~20-value `entityType` enum, so a `Show`-typed program
+      (a real SD value, not a hypothetical) fell through to no
+      classification and no `<episode-num>` at all — the exact
+      "treated as movie" symptom this item exists to fix. It would also
+      have made the "clear `cache/sd/programs/` and refresh" verification
+      step actively regress such a program from the correct pre-fix
+      fallback behavior to this broken one. Andrew decided (2026-11-06):
+      default to **"movie unless proven otherwise"** rather than
+      enumerating every series-like type, since SD adding a future
+      `entityType` value should fail safe toward the series branch (what
+      this bug report complained was missing), not silently regress back
+      toward the movie branch (what it complained was wrong). Fixed:
+      `_is_movie` now checks an explicit, narrow movie allowlist
+      (`Movie`, `TV Movie`, `Paid Program`); `_is_series_episode` is
+      `not _is_movie(...)` whenever `entityType` is present, covering
+      `Show` and any other current or future non-movie value. The
+      `programID`-prefix fallback used when `entityType` is absent is
+      unchanged (still narrowly `EP`/`SH` only) — not widened, since an
+      unrecognized prefix with no `entityType` at all shouldn't be
+      assumed series either.
+
+    **Operational note — existing cached programs won't retroactively
+    gain these fields on their own:** `services/refresh.py`'s md5-based
+    skip logic means an already-cached, unchanged program is never
+    re-fetched just because this app upgraded — nothing in SD's own data
+    changed. `cache/sd/` is fully regenerable and safe to delete at any
+    time (per `docs/data-model.md`), so after deploying this fix, clear
+    `cache/sd/programs/` once and let a refresh repopulate it (see
+    verification step 1 below) rather than waiting for stale entries to
+    expire naturally.
+
+    **Verification instructions for Andrew** (no Plex/SD access from this
+    side — every step below is something only you can run):
+
+    1. **Force a clean program-metadata re-fetch.** On the machine/
+       container running epg-editor, stop the app (or just proceed — the
+       delete is safe either way, see `docs/data-model.md`), delete the
+       contents of `/data/cache/sd/programs/` (adjust the path if you've
+       set `EPG_EDITOR_DATA_DIR` to something other than `/data`; this is
+       the same volume your `docker-compose.yml` mounts), then either wait
+       for the next scheduled refresh or trigger one immediately:
+       `curl -X POST http://<your-epg-editor-host>:<port>/api/refresh-now`
+       (or just hit that endpoint from a browser/Postman — it's a POST, so
+       a plain browser visit won't work, curl or an API client will).
+       Confirm it returns a 200 with no `errors` referencing your mapped
+       stations.
+    2. **Fetch your lineup's regenerated XMLTV** and look at the raw XML,
+       not just what Plex shows: `curl http://<your-epg-editor-host>:<port>/xmltv/<your-lineup-id>.xml`
+       (or open that URL in a browser and view source/save it). Pick one
+       `<programme>` for a channel you know airs a recognizable scripted
+       series soon (sitcom, drama, etc. — not news/sports, which may
+       legitimately get no episode-num) and one for a channel you know
+       airs a movie. For each, confirm by eye:
+       - The series one has a `<sub-title>` (unless SD genuinely has no
+         episode title for it), a `<category>Series</category>`, and at
+         least an `<episode-num system="dd_progid">...</episode-num>`
+         (and `xmltv_ns`/`onscreen` ones too, if SD had season/episode
+         numbers for it).
+       - The movie one has `<category>Movie</category>` and **no**
+         `<episode-num>` element at all.
+       If a programme you expected to be a series instead looks like the
+       movie case (or vice versa), send back: the full `<programme>` block
+       for it (copy/paste the XML), the channel name, and the exact
+       `start`/`stop` time from that block — that's enough to tell whether
+       SD classified it differently than expected (a real content-metadata
+       quirk on SD's end) versus a bug in this fix.
+    3. **Now check Plex itself**, using the *same* channel/programme/air
+       time you just confirmed in step 2's XML (so we know exactly which
+       airing you're looking at):
+       - Open Plex's guide for that channel at that time. Report back
+         (screenshot is easiest): does the guide cell/detail view show a
+         series name and episode title/number now, where it didn't
+         before?
+       - For the series programme specifically: click "Record" (or
+         whatever your Plex version's DVR record action is called) on it.
+         Report back: does Plex offer "Record Series"/"Record this
+         episode"-type options (TV show behavior), or does it still only
+         offer to record it as a movie? A screenshot of that record dialog
+         is the clearest thing to send.
+       - For the movie programme: confirm it still records as a movie
+         (we don't want to have broken that case while fixing the other).
+       - If Plex's guide hasn't picked up the new XML yet, it may need its
+         own EPG/guide data refresh — check Plex's live TV & DVR settings
+         for a "refresh guide now"-type action (exact location varies by
+         Plex version) and use that before concluding something's wrong.
+    4. If anything in step 3 still looks wrong after confirming step 2's
+       XML is correct, that narrows it to "Plex isn't reading this
+       correctly" rather than "we're not emitting it correctly" — send the
+       `<programme>` XML block from step 2 alongside the step 3
+       screenshots/description so the next debugging pass has both sides
+       side by side.
+
+    Done means: Andrew confirms step 3 for a real series episode and a
+    real movie against his real Plex deployment.
 41. **Bug: Plex doesn't show channel logos in the guide**
     (`backend-developer`) — Andrew suspects this is about how Plex reads
     XMLTV `<icon>` (or a non-standard `<image>`) on `<channel>`.

@@ -354,6 +354,31 @@ class SdProgramDescriptionEntry(SdModel):
     description: str
 
 
+class SdProgramMetadataEntry(SdModel):
+    """One data source's season/episode info for a program (e.g. Gracenote).
+
+    SD's `metadata` field on a `/programs` response item is a list of
+    single-key objects keyed by the providing data source's name (observed:
+    `"Gracenote"`; SD's docs also mention TVMaze) — see
+    docs/schedulesdirect-integration.md. This models one such entry's
+    *value*; `SdProgram.metadata` carries the provider name as the dict key
+    rather than flattening it away, since a future caller might care which
+    source a season/episode number came from.
+
+    Per SD's docs: `totalEpisodes` means "episodes in this season" on an
+    "EP" program but "episodes in the series" on an "SH" program; `season`
+    is documented as mandatory-when-present but `episode`/`totalEpisodes`/
+    `totalSeasons` are all optional — e.g. a program can carry a season
+    number with no specific episode number, which is exactly the "SH"
+    generic-series-reference case (no numbered episode identified).
+    """
+
+    season: int | None = None
+    episode: int | None = None
+    totalEpisodes: int | None = None
+    totalSeasons: int | None = None
+
+
 class SdProgram(SdModel):
     """Program metadata from `POST /programs`, keyed by program ID.
 
@@ -363,6 +388,23 @@ class SdProgram(SdModel):
     `services/refresh.py` can detect and record that instead of caching a
     blank/untitled program as if the fetch had succeeded. `code` is
     `None`/`0` for a normal, successful item.
+
+    `entityType`/`showType`/`metadata` were added for docs/backlog.md item
+    40 (Plex showing no series/episode info and misfiling episodes as
+    movies): `services/xmltv.py` needs these to decide whether a programme
+    is a movie or a series episode and to emit `<episode-num>`/`<sub-title>`
+    correctly. **Cache-migration note**: a `CachedProgram` written by an
+    earlier version of this app (before these fields existed) deserializes
+    fine — they default to `None`/empty, same as a program SD itself didn't
+    supply season/episode data for — but `services/refresh.py`'s md5-based
+    skip logic means such a stale cache entry will *not* automatically
+    re-fetch just because this app upgraded; nothing in its own data
+    (SD's per-airing/program md5) changed. Since `cache/sd/` is fully
+    regenerable and safe to delete per docs/data-model.md, the documented
+    fix for an existing deployment upgrading to this version is a one-time
+    manual `cache/sd/programs/` clear followed by a refresh (scheduled or
+    `POST /api/refresh-now`) — see docs/backlog.md item 40's verification
+    notes.
     """
 
     programID: str
@@ -371,8 +413,37 @@ class SdProgram(SdModel):
     episodeTitle150: str | None = None
     originalAirDate: str | None = None
     genres: list[str] | None = None
+    #: SD's own classification of the program (e.g. "Episode", "Series",
+    #: "Movie", "Sports", "Special", ...) — per SD's docs this, not the
+    #: programID's two-letter prefix, is the authoritative movie-vs-episode
+    #: signal ("not all sports events will have a leading SP programID;
+    #: your application should use the entity type").
+    entityType: str | None = None
+    #: A finer-grained description than `entityType` (e.g. "Feature Film"
+    #: for a Movie-entityType program) — currently carried through for
+    #: completeness/future use; `services/xmltv.py` keys its movie/series
+    #: decision off `entityType`, not this field.
+    showType: str | None = None
+    #: Season/episode metadata, keyed by provider name — see
+    #: `SdProgramMetadataEntry`. Empty when SD supplied none (most movies,
+    #: and "SH"-prefixed generic series references with no specific episode
+    #: identified).
+    metadata: list[dict[str, SdProgramMetadataEntry]] = Field(default_factory=list)
     code: int | None = None
     response: str | None = None
+
+    def primary_season_episode(self) -> SdProgramMetadataEntry | None:
+        """The first season/episode metadata entry's value, if any.
+
+        SD's `metadata` is a list of single-key `{provider: info}` objects;
+        this returns the first entry's value regardless of which provider
+        supplied it (SD's observed provider in practice is "Gracenote").
+        Returns `None` when `metadata` is empty.
+        """
+        for entry in self.metadata:
+            for value in entry.values():
+                return value
+        return None
 
 
 # --- Cache wrapper models (used by storage/sd_cache.py) ----------------------
